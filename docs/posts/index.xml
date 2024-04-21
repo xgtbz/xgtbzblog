@@ -1,1 +1,33 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on xgtbzblog</title><link>https://example.org/posts/</link><description>Recent content in Posts on xgtbzblog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Sat, 20 Apr 2024 21:44:49 +0100</lastBuildDate><atom:link href="https://example.org/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>Virtual Method Table Hook</title><link>https://example.org/posts/vmt-hook/</link><pubDate>Sat, 20 Apr 2024 21:44:49 +0100</pubDate><guid>https://example.org/posts/vmt-hook/</guid><description>Introduction Virtual method tables (aka VMTs, vtables, vftables or dispatch tables) are an array of pointers to virtual methods of a class. They contain all the class&amp;rsquo;s dynamically bound functions (virtual functions), and they are used to implement dynamic dispatch - which is deciding which implementation of a polymorphic operation should be called at run-time. These tables exist at a class level, meaning multiple instances (objects with identity) of the same class share the same VMT.</description></item><item><title>Vulnerable Driver Reversal</title><link>https://example.org/posts/vulnerable-driver-reversal/</link><pubDate>Sat, 20 Apr 2024 19:15:39 +0100</pubDate><guid>https://example.org/posts/vulnerable-driver-reversal/</guid><description>Preliminary Any driver that communicates with a user-mode application is potentially vulnerable. The privileges exposed by a driver through communication are not exclusively limited to a specific user-mode application (unless the driver takes an extra step to validate a specific process, which is rare), therefore they can be reverse engineered, exploited and leveraged by any program running in ring3. In the past, malware developers have exploited vulnerable drivers to manipulate MSRs, allocate RWX memory in the kernel virtual address space to execute shellcode, patch system calls, or even manually map an unsigned driver - this blog post demonstrates nothing new.</description></item></channel></rss>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Posts on xgtbz</title>
+    <link>https://xgtbz.github.io/xgtbzblog/posts/</link>
+    <description>Recent content in Posts on xgtbz</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Sat, 20 Apr 2024 21:44:49 +0100</lastBuildDate><atom:link href="https://xgtbz.github.io/xgtbzblog/posts/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Virtual Method Table Hook</title>
+      <link>https://xgtbz.github.io/xgtbzblog/posts/vmt-hook/</link>
+      <pubDate>Sat, 20 Apr 2024 21:44:49 +0100</pubDate>
+      
+      <guid>https://xgtbz.github.io/xgtbzblog/posts/vmt-hook/</guid>
+      
+      <description>Introduction Virtual method tables (aka VMTs, vtables, vftables or dispatch tables) are an array of pointers to virtual methods of a class. They contain all the class&amp;rsquo;s dynamically bound functions (virtual functions), and they are used to implement dynamic dispatch - which is deciding which implementation of a polymorphic operation should be called at run-time. These tables exist at a class level, meaning multiple instances (objects with identity) of the same class share the same VMT.</description>
+      
+    </item>
+    
+    <item>
+      <title>Vulnerable Driver Reversal</title>
+      <link>https://xgtbz.github.io/xgtbzblog/posts/vulnerable-driver-reversal/</link>
+      <pubDate>Sat, 20 Apr 2024 19:15:39 +0100</pubDate>
+      
+      <guid>https://xgtbz.github.io/xgtbzblog/posts/vulnerable-driver-reversal/</guid>
+      
+      <description>Preliminary Any driver that communicates with a user-mode application is potentially vulnerable. The privileges exposed by a driver through communication are not exclusively limited to a specific user-mode application (unless the driver takes an extra step to validate a specific process, which is rare), therefore they can be reverse engineered, exploited and leveraged by any program running in ring3. In the past, malware developers have exploited vulnerable drivers to manipulate MSRs, allocate RWX memory in the kernel virtual address space to execute shellcode, patch system calls, or even manually map an unsigned driver - this blog post demonstrates nothing new.</description>
+      
+    </item>
+    
+  </channel>
+</rss>

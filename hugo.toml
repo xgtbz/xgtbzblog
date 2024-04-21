@@ -2,6 +2,7 @@ baseURL = 'https://xgtbz.github.io/xgtbzblog/'
 languageCode = 'en-us'
 title = 'xgtbz'
 theme = 'hugo-blog-awesome'
+publishDir = "docs"
 
 
 [[params.socialIcons]]
