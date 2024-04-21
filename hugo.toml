@@ -3,6 +3,7 @@ languageCode = 'en-us'
 title = 'xgtbzblog'
 theme = 'hugo-blog-awesome'
 
+
 [[params.socialIcons]]
 name = "github"
 url = "https://github.com/xgtbz"
