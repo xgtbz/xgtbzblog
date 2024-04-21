@@ -1,7 +1,7 @@
 {
-    "name": "xgtbzblog",
-    "short_name": "xgtbzblog",
-    "start_url": "http://localhost:1313/xgtbzblog/",
+    "name": "xgtbz",
+    "short_name": "xgtbz",
+    "start_url": "https://xgtbz.github.io/xgtbzblog/",
     "theme_color": "#434648",
     "background_color": "#ffffff",
     "display": "standalone",
