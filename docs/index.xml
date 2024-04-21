@@ -14,7 +14,7 @@
       
       <guid>https://xgtbz.github.io/xgtbzblog/posts/vmt-hook/</guid>
       
-      <description>Introduction Virtual method tables (aka VMTs, vtables, vftables or dispatch tables) are an array of pointers to virtual methods of a class. They contain all the class&amp;rsquo;s dynamically bound functions (virtual functions), and they are used to implement dynamic dispatch - which is deciding which implementation of a polymorphic operation should be called at run-time. These tables exist at a class level, meaning multiple instances (objects with identity) of the same class share the same VMT.</description>
+      <description>Preliminary Virtual method tables (aka VMTs, vtables, vftables or dispatch tables) are an array of pointers to virtual methods of a class. They contain all the class&amp;rsquo;s dynamically bound functions (virtual functions), and they are used to implement dynamic dispatch - which is deciding which implementation of a polymorphic operation should be called at run-time. These tables exist at a class level, meaning multiple instances (objects with identity) of the same class share the same VMT.</description>
       
     </item>
     
