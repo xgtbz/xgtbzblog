@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en-us"><head><meta charset="utf-8">
+<meta http-equiv="content-type" content="text/html">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title itemprop="name">Physical to Virtual Mapping | </title>
+<meta property="og:title" content="Physical to Virtual Mapping | " />
+<meta name="twitter:title" content="Physical to Virtual Mapping | " />
+<meta itemprop="name" content="Physical to Virtual Mapping | " />
+<meta name="application-name" content="Physical to Virtual Mapping | " />
+<meta property="og:site_name" content="" />
+
+<meta name="description" content="">
+<meta itemprop="description" content="" />
+<meta property="og:description" content="" />
+<meta name="twitter:description" content="" />
+
+<meta property="og:locale" content="en-us" />
+<meta name="language" content="en-us" />
+
+  <link rel="alternate" hreflang="en" href="https://xgtbz.github.io/xgtbzblog/posts/virtual-physical-mapping/" title="" />
+
+
+
+  <meta itemprop="image" content="https://xgtbz.github.io/xgtbzblog/" />
+  <meta property="og:image" content="https://xgtbz.github.io/xgtbzblog/" />
+  <meta name="twitter:image" content="https://xgtbz.github.io/xgtbzblog/" />
+  <meta name="twitter:image:src" content="https://xgtbz.github.io/xgtbzblog/" />
+
+
+
+
+    
+    
+    
+
+    <meta property="og:type" content="article" />
+    <meta property="og:article:published_time" content=2024-04-21T13:54:05&#43;0100 />
+    <meta property="article:published_time" content=2024-04-21T13:54:05&#43;0100 />
+
+    
+
+    
+
+    <script defer type="application/ld+json">
+    {
+        "@context": "http://schema.org",
+        "@type": "Article",
+        "headline": "Physical to Virtual Mapping",
+        "author": {
+        "@type": "Person",
+        "name": ""
+        },
+        "datePublished": "2024-04-21",
+        "description": "",
+        "wordCount":  1924 ,
+        "mainEntityOfPage": "True",
+        "dateModified": "2024-04-21",
+        "image": {
+        "@type": "imageObject",
+        "url": ""
+        },
+        "publisher": {
+        "@type": "Organization",
+        "name": ""
+        }
+    }
+    </script>
+
+
+<meta name="generator" content="Hugo 0.123.3">
+
+    
+
+    <link rel="canonical" href="https://xgtbz.github.io/xgtbzblog/posts/virtual-physical-mapping/">
+    <link href="/xgtbzblog/style.min.18927ce2d0dc33c991e188f9b4efd25929b9589151125f809e2b3f45e447e971.css" rel="stylesheet">
+    <link href="/xgtbzblog/code-highlight.min.706d31975fec544a864cb7f0d847a73ea55ca1df91bf495fd12a177138d807cf.css" rel="stylesheet">
+
+    
+    <link rel="apple-touch-icon" sizes="180x180" href="docs/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="docs/icons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="docs/icons/favicon-16x16.png">
+    <link rel="mask-icon" href="docs/icons/safari-pinned-tab.svg">
+    <link rel="shortcut icon" href="docs/icons/favicon.ico">
+
+
+
+
+<link rel="manifest" href="https://xgtbz.github.io/xgtbzblog/site.webmanifest">
+
+
+<meta name="msapplication-config" content="/xgtbzblog/browserconfig.xml">
+<meta name="msapplication-TileColor" content="#2d89ef">
+<meta name="theme-color" content="#434648">
+
+    
+    <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg">
+
+    
+    </head>
+<body data-theme = "" class="notransition">
+
+<script src="/xgtbzblog/js/theme.min.8961c317c5b88b953fe27525839672c9343f1058ab044696ca225656c8ba2ab0.js" integrity="sha256-iWHDF8W4i5U/4nUlg5ZyyTQ/EFirBEaWyiJWVsi6KrA="></script>
+
+<div class="navbar" role="navigation">
+    <nav class="menu" aria-label="Main Navigation">
+        <a href="https://xgtbz.github.io/xgtbzblog/" class="logo">
+            <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" 
+viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" 
+stroke-linejoin="round" class="feather feather-home">
+<title></title>
+<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+<polyline points="9 22 9 12 15 12 15 22"></polyline>
+</svg>
+        </a>
+        <input type="checkbox" id="menu-trigger" class="menu-trigger" />
+        <label for="menu-trigger">
+            <span class="menu-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" stroke="currentColor" fill="none" viewBox="0 0 14 14"><title>Menu</title><path stroke-linecap="round" stroke-linejoin="round" d="M10.595 7L3.40726 7"></path><path stroke-linecap="round" stroke-linejoin="round" d="M10.5096 3.51488L3.49301 3.51488"></path><path stroke-linecap="round" stroke-linejoin="round" d="M10.5096 10.4851H3.49301"></path><path stroke-linecap="round" stroke-linejoin="round" d="M0.5 12.5V1.5C0.5 0.947715 0.947715 0.5 1.5 0.5H12.5C13.0523 0.5 13.5 0.947715 13.5 1.5V12.5C13.5 13.0523 13.0523 13.5 12.5 13.5H1.5C0.947715 13.5 0.5 13.0523 0.5 12.5Z"></path></svg>
+            </span>
+        </label>
+
+        <div class="trigger">
+            <ul class="trigger-container">
+                
+                
+                <li class="menu-separator">
+                    <span>|</span>
+                </li>
+                
+                
+            </ul>
+            <a id="mode" href="#">
+                <svg xmlns="http://www.w3.org/2000/svg" class="mode-sunny" width="21" height="21" viewBox="0 0 14 14" stroke-width="1">
+<title>LIGHT</title><g><circle cx="7" cy="7" r="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></circle><line x1="7" y1="0.5" x2="7" y2="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="2.4" y1="2.4" x2="3.82" y2="3.82" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="0.5" y1="7" x2="2.5" y2="7" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="2.4" y1="11.6" x2="3.82" y2="10.18" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="7" y1="13.5" x2="7" y2="11.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="11.6" y1="11.6" x2="10.18" y2="10.18" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="13.5" y1="7" x2="11.5" y2="7" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="11.6" y1="2.4" x2="10.18" y2="3.82" fill="none" stroke-linecap="round" stroke-linejoin="round"></line></g></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" class="mode-moon" width="21" height="21" viewBox="0 0 14 14" stroke-width="1">
+<title>DARK</title><g><circle cx="7" cy="7" r="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></circle><line x1="7" y1="0.5" x2="7" y2="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="2.4" y1="2.4" x2="3.82" y2="3.82" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="0.5" y1="7" x2="2.5" y2="7" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="2.4" y1="11.6" x2="3.82" y2="10.18" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="7" y1="13.5" x2="7" y2="11.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="11.6" y1="11.6" x2="10.18" y2="10.18" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="13.5" y1="7" x2="11.5" y2="7" fill="none" stroke-linecap="round" stroke-linejoin="round"></line><line x1="11.6" y1="2.4" x2="10.18" y2="3.82" fill="none" stroke-linecap="round" stroke-linejoin="round"></line></g></svg>
+            </a>
+        </div>
+    </nav>
+</div>
+
+<div class="wrapper post">
+    <main class="page-content" aria-label="Content">
+        <article>
+            <header class="header">
+                🕮 Estimated Reading Time: 10 minutes
+                <h1 class="header-title">
+                    Physical to Virtual Mapping
+                </h1>
+                
+                
+                <div class="post-meta">
+                    <time datetime="2024-04-21T13:54:05&#43;01:00" itemprop="datePublished"> Apr 21, 2024 </time>
+                </div>
+                
+            </header>
+            
+    
+        
+            
+        
+    
+    <details class="toc" open>
+        <summary><b>Table Of Contents</b></summary>
+        <nav id="TableOfContents">
+  <ul>
+    <li><a href="#preliminary">Preliminary</a></li>
+    <li><a href="#pml4-auto-entry">PML4 Auto Entry</a></li>
+    <li><a href="#operating-system-use-cases">Operating System Use Cases</a>
+      <ul>
+        <li><a href="#-working-set-trimming">→ Working Set Trimming</a></li>
+        <li><a href="#-demand-zero-fault">→ Demand Zero Fault</a></li>
+      </ul>
+    </li>
+    <li><a href="#memory-descriptor-lists">Memory Descriptor Lists</a></li>
+    <li><a href="#mireserveptes">MiReservePtes</a></li>
+    <li><a href="#conclusion">Conclusion</a></li>
+  </ul>
+</nav>
+    </details>
+            <div class="page-content">
+                <h2 id="preliminary">Preliminary</h2>
+<p>In this short blog post, we will be dissecting the innards of routines such as <code>MmMapLockedPages</code> and <code>MmMapIoSpace</code> to understand how the Virtual Memory Manager (<code>VMM</code>) maps physical memory to the kernel virtual address (<code>VA</code>) space at a high level. Mapping physical memory is a powerful technique that can be utilised for several purposes, such as overwriting read only virtual memory without changing the protection, and updating paging structures themselves. The point of this blog post isn&rsquo;t to meticulously demonstrate each &amp; every feature involved, but to explain general concepts with the appropriate detail for practical use and development. We will begin by describing the different uses of mapping physical memory throughout the operating system <code>OS</code>.</p>
+<h2 id="pml4-auto-entry">PML4 Auto Entry</h2>
+<p>As we all know, paging structure entries, <code>PxE</code>s (e.g <code>PDPTe</code>, <code>PTE</code>, <code>PML4e</code>), are consulted during the virtual to physical translation process to provide information on a given virtual range. They contain useful data required in the translation process, such as the <code>PFN</code> to the next paging structure ( or the target physical address be it the <code>PDE/PTE</code> ), the <code>G</code> bit which indicates if entries should remain in the <code>TLB</code> after a new <code>CR3</code> is loaded, and the <code>R/W</code> bit. The <code>VMM</code> must constantly update these structures to reflect the current state of a given virtual memory range, for example, when a <code>VA</code> is written to for the first time the <code>dirty bit</code> in the <code>PTE/PDE</code> must be set. However, these paging structure entries reside in physical memory, and processor instructions only use <code>VA</code>s, so how does the <code>VMM</code> update these structures using their physical addresses? The answer is: the physical addresses of <code>PxEs</code> are mapped to <code>VA</code>s via the <code>PML4</code> Auto Entry.</p>
+<p>The Auto entry is an entry within the <code>PML4</code> that references the <code>PML4</code> again instead of providing the <code>PFN</code> to the next paging structure (which would be the <code>PDPT</code>). This lags the whole translation behind, so we end up with a virtual address mapping the page table itself. Let&rsquo;s pretend the auto entry is at index <code>0x15f</code> and understand what happens step by step:</p>
+<p><img src="https://i.ibb.co/Jps8SdZ/page-table-translation.png" alt="Image"></p>
+<ul>
+<li>
+<p>First, bits <code>39-47</code> (which would be set the <code>0x15f</code> in this case) of the <code>VA</code> mapping this paging structure would be used as an index into the <code>PML4</code>.</p>
+</li>
+<li>
+<p>Entry <code>0x15f</code> would return the <code>PFN</code> of the <code>PML4</code>, since it is the auto entry.</p>
+</li>
+<li>
+<p>Bits <code>30-38</code> (the <code>PDPT</code> offset) of the <code>VA</code> would be used as an offset into the <code>PML4</code>.</p>
+</li>
+<li>
+<p>This time, the <code>PML4</code> will return the <code>PFN</code> of the <code>PDPT</code>.</p>
+</li>
+<li>
+<p>Bits <code>20-29</code> (the <code>PD</code> offset) of the <code>VA</code> would be used as an offset into the <code>PDPT</code>. This would return the <code>PFN</code> of the <code>PD</code>.</p>
+</li>
+<li>
+<p>Lastly, bits <code>12-20</code> (the <code>PT</code> offset) of the <code>VA</code> would be used as an offset into the <code>PD</code>. This would return the <code>PFN</code> of the <code>PT</code>. This is the Page Table mapped by the <code>VA</code>, from this you can access any <code>PTE</code> in the table.</p>
+</li>
+</ul>
+<p>The <code>VA</code> mapping the lowest (first) <code>PTE</code> is known as the <code>PteBase</code>, and is also the lowest kernel <code>VA</code> used. Note that on windows 7, the auto entry is hardcoded at offset <code>0x1ed</code>, but on Windows 10 &amp; 11 it is randomised on boot. Though there is only a single <code>PML4</code> auto entry, setting more bits to the auto entry in a given <code>VA</code> will lag the translation behind by the amount of auto entry references there are in the <code>VA</code>. For example, setting bits <code>30-38</code> (<code>PDPT</code> offset) to the <code>PML4</code> auto entry as well as bits <code>39-47</code> (<code>PML4</code> offset) would result in the <code>PD</code> being resolved at the end of the translation process. System routines such as <code>MiGetPteAddress</code> and <code>MiFillPteHierarchy</code> are used to retrieve the virtual addresses that map to <code>PxEs</code>.</p>
+<h2 id="operating-system-use-cases">Operating System Use Cases</h2>
+<h3 id="-working-set-trimming">→ Working Set Trimming</h3>
+<p>Another example of when the <code>VA</code> mapping a paging structure is consulted is during working set trimming. Working set list entries (<code>WSLe</code>) are kept in no particular order in the Working Set List (<code>WSL</code>), so given a regular virtual address that has been removed from a <code>WS</code> how does the <code>VMM</code> locate the corresponding <code>WSLe</code> to dicard? Well, it turns out the <code>VA</code> of the <code>PTE</code> for that virtual address is computed ( via <code>MiDeleteVirtualAddresses</code> → <code>MiDeletePagablePteRange</code> → <code>MiFillPteHierarchy</code> ), then used to resolve the <code>PFN</code>, which can be used as an index into the <code>PFN</code> Database, returning the corresponding <code>MMPFN</code> structure. Now, the appropriate <code>WSL</code> index can be extracted by the <code>VMM</code> from the <code>MMPFN</code> structure. Let&rsquo;s decipher the computation performed by <code>MiGetPteAddress</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">__int64</span> <span style="color:#66d9ef">__fastcall</span> <span style="color:#a6e22e">MiGetPteAddress</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">__int64</span> VirtualAddress)
+</span></span><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> ((VirtualAddress <span style="color:#f92672">&gt;&gt;</span> <span style="color:#ae81ff">9</span>) <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0x7FFFFFFFF8</span>i64) <span style="color:#f92672">-</span> <span style="color:#ae81ff">0x98000000000</span>i64;
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>This calculation consists of:</p>
+<ul>
+<li>
+<p>Shifting the <code>VA</code> 9 bits to the right, now the <code>PDPT</code> index is applied to the <code>PML4</code> slot</p>
+</li>
+<li>
+<p>Setting the least significant 3 bits to 0</p>
+</li>
+<li>
+<p>Subtracting some hardcoded value 0x98000000000</p>
+</li>
+</ul>
+<p>This hardcoded value is suppose to represent the <code>PteBase</code>, which is dynamically retrieved at <code>run-time</code> based off the auto-entry. Earlier, we looked at how the auto-entry lags the translation process behind, but now we&rsquo;ve shifted the virtual address by 9 bits to the right, so the <code>PDPT</code> offset is applied to the <code>PML4</code> slot. So now, during translation, the <code>PML4</code> is not referenced more than once ( only from the <code>CR3</code> now ). So in essence, this translation gives us another <code>VA</code>, which maps the <code>PT</code> used to map the <code>VirtualAddress</code> field we passed to the routine. The <code>PT</code> index is used as an offset in the <code>PT</code> to resolve the <code>PTE</code>, so we end up with the <code>VA</code> of the <code>PTE</code>.</p>
+<h3 id="-demand-zero-fault">→ Demand Zero Fault</h3>
+<p>On Windows, newly allocated virtual addresses aren&rsquo;t mapped to physical pages until they are initially referenced. This means when a virtual address is referenced for the first time, a page fault is triggered and the <code>VMM</code> allocates a new physical page to map to the virtual address. These pages are known as zero initialised pages &amp; are found on the <code>Zero List</code>, hence &ldquo;<strong>demand zero fault</strong>&rdquo;. Zero initialised pages have no <code>PTE</code> pointing to them, they are free for the <code>VMM</code> to use to map to new virtual addresses. However, when the <code>Zero List</code> is empty, the <code>VMM</code> consults the <code>Free List</code> to steal a free page that can be used for the mapping. The free list contains pages that aren&rsquo;t being pointed to by any <code>PTE</code>, however, they were once pointed to by a <code>PTE</code> and still contain the stale data from the old <code>VA</code> it was mapped to. So, before pages from the free list can be used, they must be zeroed, their contents have to be erased. However, this brings the same problem as before, pages on the free list aren&rsquo;t mapped to any VA and processor instructions do not interface directly with physical instructions; so they must be mapped to <code>VAs</code> in order to be zeroed.</p>
+<p>There is a special system thread dedicated to zeroing pages from the free list, known as the <code>Zero Page Thread</code>. This executes <code>MiZeroPhyscialPage</code> which calls <code>MiMapPageInHyperspaceWorker</code> to perform the mapping. Interestingly, <code>MiMapPageInHyperspaceWorker</code> uses a single <code>VA</code> to map free pages to be zeroed, meaning every call to <code>MiMapPageInHyperspaceWorker</code> must be followed with a subsequent call to <code>MiUnmapPageInHyperspaceWorker</code>. To ensure this condition is satisfied, the routine raises the <code>IRQL</code> to <code>DPC</code> to prevent preemption, the second argument to <code>MiUnmapPageInHyperspaceWorker</code> being the <code>IRQL</code> before it was raised.</p>
+<h2 id="memory-descriptor-lists">Memory Descriptor Lists</h2>
+<p>As Microsoft Documentation states, a Memory Descriptor List (<code>MDL</code>) is used to describe the physical layout of a virtual memory range. This is because contiguous virtual memory may be scattered in physical memory as a result of fragmentation. A common techqniue used by attackers to overwrite read-only memory (<code>ROM</code>) is to allocate an <code>MDL</code> to describe some virtual memory buffer, and then map the physical pages, stored in the <code>MDL</code>, corresponding to the virtual memory buffer to another virtual range with a different memory protection. This gives you two separate virtual address ranges that resolve to the same physical address, but have different memory protections, analogous to two separate views of a section oject. Now we&rsquo;ve looked at how physical memory is mapped to virtual memory by the <code>OS</code>, we should shift our focus to examining the different ways that mapping physical memory can be leveraged by an attacker in <code>ring 0</code>, and how it works for different routines such as <code>MmMapMapLockedPagesSpecifyCache</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">OverwriteRom</span>(<span style="color:#66d9ef">void</span><span style="color:#f92672">*</span> VA, <span style="color:#66d9ef">void</span><span style="color:#f92672">*</span> NewValue, uint64 Size) {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Allocate the MDL
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    MDL<span style="color:#f92672">*</span> Mdl <span style="color:#f92672">=</span> IoAllocateMdl(VA, Size, FALSE, FALSE, NULL);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span>Mdl) <span style="color:#66d9ef">return</span> false;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Ensure pages remain resident
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    MmProbeAndLockPages(Mdl, KernelMode, IoReadAccess);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Establish the mapping
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">void</span><span style="color:#f92672">*</span> MappedRange <span style="color:#f92672">=</span> MmMapLockedPagesSpecifyCache(Mdl, KernelMode, 
+</span></span><span style="display:flex;"><span>            MmNonCached, NULL, FALSE, NormalPagePriority);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (MappedRange <span style="color:#f92672">==</span> <span style="color:#66d9ef">nullptr</span>)
+</span></span><span style="display:flex;"><span>    {
+</span></span><span style="display:flex;"><span>        MmUnlockPages(Mdl);
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> false;
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Change the protection of the mapped range
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    MmProtectMdlSystemAddress(Mdl, PAGE_READWRITE);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Write to the mapped RW range
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    RtlCopyMemory(MappedRange, NewValue, Size) 
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Cleanup
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    MmUnmapLockedPages(MappedRange, Mdl);
+</span></span><span style="display:flex;"><span>    MmUnlockPages(Mdl);
+</span></span><span style="display:flex;"><span>    IoFreeMdl(Mdl);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> true;
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>Instead of using an <code>MDL</code>, the same effect can be achieved with <code>MmMapIoSpace</code>, which would be more suitable for a smaller virtual memory range.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">OverwriteRom</span>(<span style="color:#66d9ef">void</span><span style="color:#f92672">*</span> VA, <span style="color:#66d9ef">void</span><span style="color:#f92672">*</span> NewValue, uint64 Size) {
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    PHYSICAL_ADDRESS PA <span style="color:#f92672">=</span> MmGetPhysicalAddress(VA);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Default RW/RWX
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">void</span><span style="color:#f92672">*</span> MappedRange <span style="color:#f92672">=</span> MmMapIoSpace(PA, Size, MmNonCached);
+</span></span><span style="display:flex;"><span>    RtlCopyMemory(MappedRange, NewValue, Size);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    MmUnmapIoSpace(MappedRange, Size);
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>When we statically analyse both of these routines to understand how the mapping works, we end up with a call to <code>MiReservePtes</code> in both cases. A global qword passed as the first argument, and a 32-bit integer as the next. To understand the purpose of this function and their arguments, we should be aware of how the <code>VMM</code> manages the <code>system PTE range</code>, and what it is used for.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>MiReservePtes((<span style="color:#66d9ef">__int64</span>)<span style="color:#f92672">&amp;</span>qword_140C69600, (<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span>)v13);
+</span></span></code></pre></div><h2 id="mireserveptes">MiReservePtes</h2>
+<p>The <code>system pte</code> region is a dynamically allocated portion of the kernel virtual address space housing <code>MDL</code> mappings, drivers, kernel stacks and more. To manage this region, the <code>VMM</code> maintains two structures of type <code>MI_SYSTEM_PTE_TYPE</code> named <code>MiSystemPteInfo</code> and <code>MiKernelStackPteInfo</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">_MI_SYSTEM_PTE_TYPE</span>
+</span></span><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">_RTL_BITMAP</span> Bitmap;                                              <span style="color:#75715e">//0x0
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">_MMPTE</span><span style="color:#f92672">*</span> BasePte;                                                 <span style="color:#75715e">//0x8
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    ULONG Flags;                                                            <span style="color:#75715e">//0xc
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">enum</span> <span style="color:#a6e22e">_MI_SYSTEM_VA_TYPE</span> VaType;                                         <span style="color:#75715e">//0x10
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    ULONG<span style="color:#f92672">*</span> FailureCount;                                                    <span style="color:#75715e">//0x14
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    ULONG PteFailures;                                                      <span style="color:#75715e">//0x18
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">union</span>
+</span></span><span style="display:flex;"><span>    {
+</span></span><span style="display:flex;"><span>        ULONG SpinLock;                                                     <span style="color:#75715e">//0x1c
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>        <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">_EX_PUSH_LOCK</span><span style="color:#f92672">*</span> GlobalPushLock;                               <span style="color:#75715e">//0x1c
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    };
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">volatile</span> ULONG TotalSystemPtes;                                         <span style="color:#75715e">//0x20
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    ULONG Hint;                                                             <span style="color:#75715e">//0x24
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    ULONG LowestBitEverAllocated;                                           <span style="color:#75715e">//0x28
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">_MI_CACHED_PTES</span><span style="color:#f92672">*</span> CachedPtes;                                     <span style="color:#75715e">//0x2c
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">volatile</span> ULONG TotalFreeSystemPtes;                                     <span style="color:#75715e">//0x30
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>}; 
+</span></span></code></pre></div><p>The first field is a <code>bitmap</code> representing a portion of the system <code>pte</code> range. Each bit corresponds to a <code>large page</code>, 2MB, however keep in mind regular pages can be allocated within this region. These buffers are stored at the start of system <code>pte</code> region themselves, adjacently, with 4MB reserved for each of them, so 8MB of the system <code>pte</code> range is reserved for this purpose. Allocations to this region are perfomed via a call to <code>MiReservePtes</code>, which takes one of these <code>bitmaps</code> as its first argument - the second being the amount of pages to be reserved. From this, we can deduce that <code>MiReservePte</code>s can be used to reserve a virtual address to map physical pages into. The routine that actually implements the physical memory mapping using the <code>PTEs</code> allocated by <code>MiReservePtes</code> is <code>MiFillSystemPtes</code>, while <code>MiExpandPtes</code> is used to assign free large pages to the <code>bitmap</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>    MMPTE<span style="color:#f92672">*</span> Pte <span style="color:#f92672">=</span> MiReservePtes((_MI_SYSTEM_PTE_TYPE <span style="color:#f92672">*</span>)<span style="color:#f92672">&amp;</span>MiSystemPteInfo, (<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span>)PageCount);
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> ( <span style="color:#f92672">!</span>Pte )
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">return</span> NULL;
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> ( (<span style="color:#66d9ef">int</span>)MiFillSystemPtes((_DWORD)Pte .... ); 
+</span></span></code></pre></div><h2 id="conclusion">Conclusion</h2>
+<p>You should now have a solid understanding of how physical memory is mapped to virtual on the <code>OS</code>, and the different use cases of this mapping. We&rsquo;ve looked at some of the root function ( <code>MiReservePtes</code> ) called by all routines that map physical memory to the system pte virtual address range ( e.g <code>MmAllocateMappingAddress</code> ) at a high level, and how the system <code>pte</code> range is managed by the <code>VMM</code>.</p>
+
+            </div>
+        </article></main>
+</div>
+<footer class="footer">
+    <span class="footer_item"> </span>
+    &nbsp;
+
+    <div class="footer_social-icons">
+<a href="https://github.com/xgtbz" target="_blank" rel="noopener noreferrer me"
+    title="">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+    stroke-linecap="round" stroke-linejoin="round">
+    <path
+        d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22">
+    </path>
+</svg>
+</a>
+</div>
+    <small class="footer_copyright">
+        © 2024 .
+        
+    </small>
+</footer>
+
+
+
+
+
+
+
+    
+    <script src="https://xgtbz.github.io/xgtbzblog/js/main.min.4ee188e1744c19816e95a540b2650ed9f033ea0371e74eac8e717355cfca8741.js" integrity="sha256-TuGI4XRMGYFulaVAsmUO2fAz6gNx506sjnFzVc/Kh0E="></script>
+
+    
+
+</body>
+</html>
