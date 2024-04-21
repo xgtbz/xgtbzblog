@@ -1,6 +1,6 @@
 baseURL = 'https://xgtbz.github.io/xgtbzblog/'
 languageCode = 'en-us'
-title = ' '
+title = 'xgtbz'
 theme = 'hugo-blog-awesome'
 publishDir = "docs"
 
