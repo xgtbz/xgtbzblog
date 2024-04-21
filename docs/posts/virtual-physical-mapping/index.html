@@ -53,7 +53,7 @@
         },
         "datePublished": "2024-04-21",
         "description": "",
-        "wordCount":  1924 ,
+        "wordCount":  1958 ,
         "mainEntityOfPage": "True",
         "dateModified": "2024-04-21",
         "image": {
@@ -299,10 +299,24 @@ stroke-linejoin="round" class="feather feather-home">
 </span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">volatile</span> ULONG TotalFreeSystemPtes;                                     <span style="color:#75715e">//0x30
 </span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>}; 
 </span></span></code></pre></div><p>The first field is a <code>bitmap</code> representing a portion of the system <code>pte</code> range. Each bit corresponds to a <code>large page</code>, 2MB, however keep in mind regular pages can be allocated within this region. These buffers are stored at the start of system <code>pte</code> region themselves, adjacently, with 4MB reserved for each of them, so 8MB of the system <code>pte</code> range is reserved for this purpose. Allocations to this region are perfomed via a call to <code>MiReservePtes</code>, which takes one of these <code>bitmaps</code> as its first argument - the second being the amount of pages to be reserved. From this, we can deduce that <code>MiReservePte</code>s can be used to reserve a virtual address to map physical pages into. The routine that actually implements the physical memory mapping using the <code>PTEs</code> allocated by <code>MiReservePtes</code> is <code>MiFillSystemPtes</code>, while <code>MiExpandPtes</code> is used to assign free large pages to the <code>bitmap</code>.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>    MMPTE<span style="color:#f92672">*</span> Pte <span style="color:#f92672">=</span> MiReservePtes((_MI_SYSTEM_PTE_TYPE <span style="color:#f92672">*</span>)<span style="color:#f92672">&amp;</span>MiSystemPteInfo, (<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span>)PageCount);
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> ( <span style="color:#f92672">!</span>Pte )
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">return</span> NULL;
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> ( (<span style="color:#66d9ef">int</span>)MiFillSystemPtes((_DWORD)Pte .... ); 
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-nasm" data-lang="nasm"><span style="display:flex;"><span><span style="color:#a6e22e">cmovz</span>   r14, r13
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">cmp</span>     r14, rax
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">ja</span>      loc_14048BB21
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">mov</span>     edx, r14d
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">lea</span>     rcx, MiSystemPteInfo
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">call</span>    MiReservePtes
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">mov</span>     rdi, rax
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">test</span>    rax, rax
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">jz</span>      loc_14048BB21
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">mov</span>     r8, [rbp<span style="color:#f92672">+</span><span style="color:#ae81ff">4Fh</span><span style="color:#f92672">+</span>var_A8]
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">lea</span>     rax, [rbp<span style="color:#f92672">+</span><span style="color:#ae81ff">4Fh</span><span style="color:#f92672">+</span>var_B0]
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">mov</span>     r9d, esi
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">mov</span>     [rsp<span style="color:#f92672">+</span><span style="color:#ae81ff">0E0h</span><span style="color:#f92672">+</span>var_B8], rax
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">mov</span>     rcx, rdi
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">shr</span>     r12d, <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">and</span>     r12d, <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">mov</span>     <span style="color:#66d9ef">dword</span> ptr [rsp<span style="color:#f92672">+</span><span style="color:#ae81ff">0E0h</span><span style="color:#f92672">+</span>var_C0], r12d
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">call</span>    MiFillSystemPtes
 </span></span></code></pre></div><h2 id="conclusion">Conclusion</h2>
 <p>You should now have a solid understanding of how physical memory is mapped to virtual on the <code>OS</code>, and the different use cases of this mapping. We&rsquo;ve looked at some of the root function ( <code>MiReservePtes</code> ) called by all routines that map physical memory to the system pte virtual address range ( e.g <code>MmAllocateMappingAddress</code> ) at a high level, and how the system <code>pte</code> range is managed by the <code>VMM</code>.</p>
 
