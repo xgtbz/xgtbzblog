@@ -6,7 +6,7 @@ draft = false
 
 ## Preliminary
 
-In this short blog post, we will be dissecting the innards of routines such as `MmMapLockedPages` and `MmMapIoSpace` to understand how the Virtual Memory Manager (`VMM`) maps physical memory to the kernel virtual address (`VA`) space at a high level. Mapping physical memory is a powerful technique that can be utilised for several purposes, such as overwriting read only virtual memory without changing the protection, and updating paging structures themselves. The point of this blog post isn't to meticulously demonstrate each & every feature involved, but to explain general concepts with the appropriate detail for practical use and development. We will begin by describing the different uses of mapping physical memory throughout the operating system `OS`.
+In this short blog post, we will be dissecting the innards of routines such as `MmMapLockedPages` and `MmMapIoSpace` to understand how the Virtual Memory Manager (`VMM`) maps physical memory to the kernel virtual address (`VA`) space at a high level. Mapping physical memory is a powerful technique that can be utilised for several purposes, such as overwriting read only virtual memory without changing the protection, and updating paging structures themselves. The point of this blog post isn't to meticulously demonstrate each & every feature involved, but to explain general concepts with the appropriate detail for practical use and development. We will begin by describing the different uses of mapping physical memory throughout the operating system (`OS`).
 
 ## PML4 Auto Entry
 
