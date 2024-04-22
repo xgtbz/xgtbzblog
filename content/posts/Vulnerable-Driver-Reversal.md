@@ -145,7 +145,7 @@ uint64_t __fastcall ioctl_routine(uint64_t a1, uint64_t a2)
 
 So now it's finally time to end our analysis of the `OEP` and move into the dispatch routine that is invoked when we make a call to `DeviceIoControl`. We know that this is `IOCTLRoutine` from the code snippet above. The first step we should take is using logic to determine the meaning of the arguments passed to this routine. If we `xref` to this function, we'll find that it is only referenced when it is being written to the `MajorFunction` array, so we can only the reconstruct the real structures of these arguments from their use within the function, but before we do this, you should be introduced to the `SystemBuffer` field under the `IRP`.
 
-## IRP->SystemBuffer
+### IRP->SystemBuffer
 
 The `SystemBuffer` field under the `IRP` structure is used to hold the buffer for the current `I/O` operation during `METHOD_BUFFERED` `IOCTL` commands. This field is `0x18` bytes down the `IRP`, and if we look for references to `a2` (second argument) within the function, we can see that this offset is added to it. To assume that `a2` is of type `IRP` because `0x18` is added to it seems ludicrous at first, but we will do so because it's normal for the `IRP` to be passed to the `DeviceControl` dispatch routine (remember `DeviceIoControl` control flow analysis). This assumption is solidified when we look at other instances where `a2` is referenced, so we will re-name this 'Irp'. Now, we can decipher other structures using our hypothesis that `a2` is the Irp.
 

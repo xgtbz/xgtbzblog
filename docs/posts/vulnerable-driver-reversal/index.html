@@ -169,8 +169,11 @@ stroke-linejoin="round" class="feather feather-home">
     <li><a href="#opening-a-handle-to-the-driver">Opening a handle to the driver</a></li>
     <li><a href="#ioctl-internals-summary">IOCTL Internals Summary</a></li>
     <li><a href="#locating-the-devicecontrol-dispatch-routine">Locating the DeviceControl dispatch routine</a></li>
-    <li><a href="#making-sense-of-the-arguments-passed-to-the-ioctl-handler">Making sense of the arguments passed to the IOCTL handler</a></li>
-    <li><a href="#irp-systembuffer">IRP-&gt;SystemBuffer</a></li>
+    <li><a href="#making-sense-of-the-arguments-passed-to-the-ioctl-handler">Making sense of the arguments passed to the IOCTL handler</a>
+      <ul>
+        <li><a href="#irp-systembuffer">IRP-&gt;SystemBuffer</a></li>
+      </ul>
+    </li>
     <li><a href="#allocate-contiguous-physical-memory">Allocate contiguous physical memory</a></li>
     <li><a href="#free-contiguous-memory">Free Contiguous Memory</a></li>
     <li><a href="#readwrite-control-registers">Read/Write Control Registers</a></li>
@@ -312,7 +315,7 @@ call    cs:IoCreateSymbolicLink
 </span></span></code></pre></div><h2 id="making-sense-of-the-arguments-passed-to-the-ioctl-handler">Making sense of the arguments passed to the IOCTL handler</h2>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">uint64_t</span> <span style="color:#66d9ef">__fastcall</span> ioctl_routine(<span style="color:#66d9ef">uint64_t</span> a1, <span style="color:#66d9ef">uint64_t</span> a2)
 </span></span></code></pre></div><p>So now it&rsquo;s finally time to end our analysis of the <code>OEP</code> and move into the dispatch routine that is invoked when we make a call to <code>DeviceIoControl</code>. We know that this is <code>IOCTLRoutine</code> from the code snippet above. The first step we should take is using logic to determine the meaning of the arguments passed to this routine. If we <code>xref</code> to this function, we&rsquo;ll find that it is only referenced when it is being written to the <code>MajorFunction</code> array, so we can only the reconstruct the real structures of these arguments from their use within the function, but before we do this, you should be introduced to the <code>SystemBuffer</code> field under the <code>IRP</code>.</p>
-<h2 id="irp-systembuffer">IRP-&gt;SystemBuffer</h2>
+<h3 id="irp-systembuffer">IRP-&gt;SystemBuffer</h3>
 <p>The <code>SystemBuffer</code> field under the <code>IRP</code> structure is used to hold the buffer for the current <code>I/O</code> operation during <code>METHOD_BUFFERED</code> <code>IOCTL</code> commands. This field is <code>0x18</code> bytes down the <code>IRP</code>, and if we look for references to <code>a2</code> (second argument) within the function, we can see that this offset is added to it. To assume that <code>a2</code> is of type <code>IRP</code> because <code>0x18</code> is added to it seems ludicrous at first, but we will do so because it&rsquo;s normal for the <code>IRP</code> to be passed to the <code>DeviceControl</code> dispatch routine (remember <code>DeviceIoControl</code> control flow analysis). This assumption is solidified when we look at other instances where <code>a2</code> is referenced, so we will re-name this &lsquo;Irp&rsquo;. Now, we can decipher other structures using our hypothesis that <code>a2</code> is the Irp.</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>  IoStackLocation <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> <span style="color:#66d9ef">long</span> <span style="color:#f92672">*</span>)(Irp <span style="color:#f92672">+</span> <span style="color:#ae81ff">0xB8</span>);
 </span></span><span style="display:flex;"><span>  SystemBuffer <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(<span style="color:#66d9ef">int</span> <span style="color:#f92672">**</span>)(Irp <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x18</span>);
