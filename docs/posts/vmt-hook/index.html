@@ -53,7 +53,7 @@
         },
         "datePublished": "2023-12-19",
         "description": "",
-        "wordCount":  3446 ,
+        "wordCount":  3454 ,
         "mainEntityOfPage": "True",
         "dateModified": "2023-12-19",
         "image": {
@@ -158,7 +158,7 @@ stroke-linejoin="round" class="feather feather-home">
         
     
     <details class="toc" open>
-        <summary><b></b></summary>
+        <summary><b>Table Of Contents</b></summary>
         <nav id="TableOfContents">
   <ul>
     <li><a href="#preliminary">Preliminary</a></li>
@@ -385,6 +385,9 @@ Animal destructor called
 </span></span></code></pre></div><p>This method is great when we can&rsquo;t change the protection, but if we want our hook to remain, we must work on ensuring it&rsquo;s not detected by an anti-cheat. We will look at how to do this in the next chapter.</p>
 <h2 id="leveraging-devirtualisation-to-avoid-hook-recursion">Leveraging devirtualisation to avoid hook recursion</h2>
 <p>Replacing entries in these tables are extremely easy, but this type of exploitation is even easier to detect, simply because the behaviour returned to the program differs from what is expected. For example, when <code>Speak()</code> is called, we expect &ldquo;I am a dog\n&rdquo; to be printed, not &ldquo;hooked!!!&rdquo;. So our job is to emulate the function and produce something with similar or identical semantics, almost 1:1 with the original function so an anti-cheat isn&rsquo;t suspicious that the function has been replaced. However, since it is not always the case that we have the definition/implementation for the function we are sometimes incapable of emulating it. It would be much more reasonable to just call the original function normally in our <code>replace_function</code> and redirect execution to where it should be, so nothing malicious is surmised by an anti-cheat. This is possible to do because the <code>this</code> pointer is passed implicitly as an argument to all member functions through the <code>RCX</code> register. This solution seems optimal at first, but calling the original function would result in a virtual call, in which whatever is stored in the <code>VMT</code> (which we have patched) would be called, so we would just jump back to our hook, and we&rsquo;re then left with an infinite recursion issue that&rsquo;d lead to a stack overflow.</p>
+<blockquote>
+<p><strong>Image may be more clear with light mode</strong></p>
+</blockquote>
 <p><img src="https://i.ibb.co/P594fhy/save-hook-recursiob-Photoroom-png-Photoroom.png" alt="Image"></p>
 <p>So, to circumvent this issue, we get the <code>run-time</code> type of the object pointed to by the <code>this</code> pointer using reflection ( <code>typeid</code> operator ), and then we construct an object of the same type with automatic storage duration. We then call the function we&rsquo;ve replaced using the object we just created, forcing the compiler to use devirtualisation rather than a virtual call, because the type of the object will always be the same, regardless of whether it&rsquo;s <code>run-time</code> or not. This way, the <code>vtable</code> isn&rsquo;t consulted to look for the virtual function, so the function that will be called will not be our <code>replace_function</code>, but rather the actual virtual function (since it&rsquo;s a direct call). We have to update all the fields of the object we just created to match the object on which the virtual function was called, because the virtual function may operate on this data. We could do this by checking if it&rsquo;s copy constructible, but if it isn&rsquo;t we should just copy it out manually. We don&rsquo;t want the object to be moved, because want the <code>this</code> pointer to point to valid data (if it was moved it&rsquo;d be a dangling pointer). Let&rsquo;s update our <code>replace_function</code> to do this</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#75715e">// &#39;this&#39; passed through RCX (first argument)

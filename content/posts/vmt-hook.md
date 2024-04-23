@@ -285,6 +285,7 @@ This method is great when we can't change the protection, but if we want our hoo
 
 Replacing entries in these tables are extremely easy, but this type of exploitation is even easier to detect, simply because the behaviour returned to the program differs from what is expected. For example, when `Speak()` is called, we expect "I am a dog\n" to be printed, not "hooked!!!". So our job is to emulate the function and produce something with similar or identical semantics, almost 1:1 with the original function so an anti-cheat isn't suspicious that the function has been replaced. However, since it is not always the case that we have the definition/implementation for the function we are sometimes incapable of emulating it. It would be much more reasonable to just call the original function normally in our `replace_function` and redirect execution to where it should be, so nothing malicious is surmised by an anti-cheat. This is possible to do because the `this` pointer is passed implicitly as an argument to all member functions through the `RCX` register. This solution seems optimal at first, but calling the original function would result in a virtual call, in which whatever is stored in the `VMT` (which we have patched) would be called, so we would just jump back to our hook, and we're then left with an infinite recursion issue that'd lead to a stack overflow.
 
+> **Image may be more clear with light mode**
 
 ![Image](https://i.ibb.co/P594fhy/save-hook-recursiob-Photoroom-png-Photoroom.png)
 
