@@ -73,28 +73,27 @@
     
 
     <link rel="canonical" href="https://xgtbz.github.io/xgtbzblog/posts/vmt-hook/">
-    <link href="/xgtbzblog/style.min.18927ce2d0dc33c991e188f9b4efd25929b9589151125f809e2b3f45e447e971.css" rel="stylesheet">
+    <link href="/xgtbzblog/style.min.e7fd0eb38cba24140d631b486b06cbb374ea23b9c922f4bbd694bf6f0f1e1e53.css" rel="stylesheet">
     <link href="/xgtbzblog/code-highlight.min.706d31975fec544a864cb7f0d847a73ea55ca1df91bf495fd12a177138d807cf.css" rel="stylesheet">
 
     
-    <link rel="apple-touch-icon" sizes="180x180" href="docs/icons/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="docs/icons/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="docs/icons/favicon-16x16.png">
-    <link rel="mask-icon" href="docs/icons/safari-pinned-tab.svg">
-    <link rel="shortcut icon" href="docs/icons/favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="/xgtbzblog/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/xgtbzblog/icons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/xgtbzblog/icons/favicon-16x16.png">
+    <link rel="mask-icon" href="/xgtbzblog/icons/safari-pinned-tab.svg">
+    <link rel="shortcut icon" href="/xgtbzblog/favicon.ico">
 
 
 
 
 <link rel="manifest" href="https://xgtbz.github.io/xgtbzblog/site.webmanifest">
 
-
 <meta name="msapplication-config" content="/xgtbzblog/browserconfig.xml">
 <meta name="msapplication-TileColor" content="#2d89ef">
 <meta name="theme-color" content="#434648">
 
     
-    <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="/xgtbzblog/icons/favicon.svg">
 
     
     </head>
@@ -144,10 +143,7 @@ stroke-linejoin="round" class="feather feather-home">
     <main class="page-content" aria-label="Content">
         <article>
             <header class="header">
-                🕮 Estimated Reading Time: 17 minutes
-                <h1 class="header-title">
-                    Virtual Method Table Hook
-                </h1>
+                <h1 class="header-title">Virtual Method Table Hook</h1>
                 
                 
                 <div class="post-meta">
@@ -162,7 +158,7 @@ stroke-linejoin="round" class="feather feather-home">
         
     
     <details class="toc" open>
-        <summary><b>Table Of Contents</b></summary>
+        <summary><b></b></summary>
         <nav id="TableOfContents">
   <ul>
     <li><a href="#preliminary">Preliminary</a></li>
@@ -329,7 +325,7 @@ Animal destructor called
 </span></span></code></pre></div><p>Here, <code>my_animal</code> has dynamic storage duration, it is allocated on the <code>free store</code>. It is not temporary, and therefore it does not destruct unless we delete it.  Devirtualisation cannot happen - the type of the object pointed to by a pointer is only known at <code>run-time</code>. In this scenario, when we place our <code>HWBP</code> on the <code>vtable</code>, control is transferred to the debugger as expected, showing a virtual call (rather than a direct call) has occurred, and &ldquo;I am a dog&rdquo; is printed rightly. Now let&rsquo;s shift our focus back to virtual destructors. Marking a destructor of a base class virtual appends it to the vtable so it is dynamically bound, ensuring that the derived class is properly destructed. In other languages such as rust, the virtual destructor of a polymorphic object is added to the <code>VMT</code> automatically, but C++ allows us to avoid the overhead associated with calling a trivial destructor for a derived class solely for the sake of coherency.</p>
 <h2 id="flaws-of-dynamic-dispatch">Flaws of Dynamic Dispatch</h2>
 <p>Calls to virtual functions are relatively slow compared to inline or direct calls. First, the class object is dereferenced to give us the location of the virtual pointer. Then, the virtual pointer is dereferenced to give us our virtual method table. Then, we use pointer arithmetic to index into the <code>VMT</code> to get our target virtual function; you can understand why it&rsquo;s so slow. There are 3 layers of indirection. The table I&rsquo;ve constructed below shows the flow of a virtual call:</p>
-<p><img src="https://i.ibb.co/QHS8pyB/vmt-control-flow-removebg-preview.png" alt="Image"></p>
+<p><img src="https://i.ibb.co/kKSYXQv/vmt-flow-Photoroom-png-Photoroom.png" alt="Image"></p>
 <p>Now we should understand the reason for the devirtualisation optimisation - the compiler should avoid virtual calls when a direct call is possible ( when the object is not a pointer or reference, so it&rsquo;s static type is the same at <code>run-time</code> ). Not only is it slow, the virtual pointer added to our class increases the size, so our structure takes up more space in memory. <code>VMTs</code> are also easily exploitable, they can be cloned, patched or even replaced entirely. We&rsquo;ll look at how this is done in the next chapter.</p>
 <h2 id="hooking-the-virtual-method-table">Hooking the virtual method table</h2>
 <p>Hooking a <code>vtable</code> is just replacing the <code>stub/thunk</code> with your target function. We mentioned earlier that the <code>vtable</code> is in <code>RX</code> memory, so we must change it&rsquo;s protection before we patch it and restore the protection. Below is a code example of what we&rsquo;ve just described:</p>
@@ -389,7 +385,7 @@ Animal destructor called
 </span></span></code></pre></div><p>This method is great when we can&rsquo;t change the protection, but if we want our hook to remain, we must work on ensuring it&rsquo;s not detected by an anti-cheat. We will look at how to do this in the next chapter.</p>
 <h2 id="leveraging-devirtualisation-to-avoid-hook-recursion">Leveraging devirtualisation to avoid hook recursion</h2>
 <p>Replacing entries in these tables are extremely easy, but this type of exploitation is even easier to detect, simply because the behaviour returned to the program differs from what is expected. For example, when <code>Speak()</code> is called, we expect &ldquo;I am a dog\n&rdquo; to be printed, not &ldquo;hooked!!!&rdquo;. So our job is to emulate the function and produce something with similar or identical semantics, almost 1:1 with the original function so an anti-cheat isn&rsquo;t suspicious that the function has been replaced. However, since it is not always the case that we have the definition/implementation for the function we are sometimes incapable of emulating it. It would be much more reasonable to just call the original function normally in our <code>replace_function</code> and redirect execution to where it should be, so nothing malicious is surmised by an anti-cheat. This is possible to do because the <code>this</code> pointer is passed implicitly as an argument to all member functions through the <code>RCX</code> register. This solution seems optimal at first, but calling the original function would result in a virtual call, in which whatever is stored in the <code>VMT</code> (which we have patched) would be called, so we would just jump back to our hook, and we&rsquo;re then left with an infinite recursion issue that&rsquo;d lead to a stack overflow.</p>
-<p><img src="https://i.ibb.co/W2HJJx8/inf-recursion.png" alt="Image"></p>
+<p><img src="https://i.ibb.co/P594fhy/save-hook-recursiob-Photoroom-png-Photoroom.png" alt="Image"></p>
 <p>So, to circumvent this issue, we get the <code>run-time</code> type of the object pointed to by the <code>this</code> pointer using reflection ( <code>typeid</code> operator ), and then we construct an object of the same type with automatic storage duration. We then call the function we&rsquo;ve replaced using the object we just created, forcing the compiler to use devirtualisation rather than a virtual call, because the type of the object will always be the same, regardless of whether it&rsquo;s <code>run-time</code> or not. This way, the <code>vtable</code> isn&rsquo;t consulted to look for the virtual function, so the function that will be called will not be our <code>replace_function</code>, but rather the actual virtual function (since it&rsquo;s a direct call). We have to update all the fields of the object we just created to match the object on which the virtual function was called, because the virtual function may operate on this data. We could do this by checking if it&rsquo;s copy constructible, but if it isn&rsquo;t we should just copy it out manually. We don&rsquo;t want the object to be moved, because want the <code>this</code> pointer to point to valid data (if it was moved it&rsquo;d be a dangling pointer). Let&rsquo;s update our <code>replace_function</code> to do this</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#75715e">// &#39;this&#39; passed through RCX (first argument)
 </span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">void</span> <span style="color:#a6e22e">replace_function</span>(Animal<span style="color:#f92672">*</span> thisptr)
@@ -446,7 +442,7 @@ I am a dog
 
     <div class="footer_social-icons">
 <a href="https://github.com/xgtbz" target="_blank" rel="noopener noreferrer me"
-    title="">
+    title="Github">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
     stroke-linecap="round" stroke-linejoin="round">
     <path
@@ -456,7 +452,7 @@ I am a dog
 </a>
 </div>
     <small class="footer_copyright">
-        © 2024 .
+        © 2024 xgtbz.
         
     </small>
 </footer>

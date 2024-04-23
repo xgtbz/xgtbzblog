@@ -11,4 +11,5 @@ url = "https://github.com/xgtbz"
 
 [params]
   toc = true
+  author.name = "xgtbz"
   tocOpen = true

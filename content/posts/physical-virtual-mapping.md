@@ -146,7 +146,9 @@ struct _MI_SYSTEM_PTE_TYPE
 
 The first field is a `bitmap` representing a portion of the system `pte` range. Each bit corresponds to a `large page`, 2MB, however keep in mind regular pages can be allocated within this region. These buffers are stored at the start of system `pte` region themselves, adjacently, with 4MB reserved for each of them, so 8MB of the system `pte` range is reserved for this purpose. Allocations to this region are perfomed via a call to `MiReservePtes`, which takes one of these `bitmaps` as its first argument - the second being the amount of pages to be reserved. From this, we can deduce that `MiReservePte`s can be used to reserve a virtual address to map physical pages into. The routine that actually implements the physical memory mapping using the `PTEs` allocated by `MiReservePtes` is `MiFillSystemPtes`, while `MiExpandPtes` is used to assign free large pages to the `bitmap`.
 
-```nasm
+
+
+```nasm 
 cmovz   r14, r13
 cmp     r14, rax
 ja      loc_14048BB21
