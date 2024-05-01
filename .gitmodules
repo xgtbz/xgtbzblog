@@ -3,3 +3,6 @@
     path = themes/hugo-blog-awesome
     url = https://github.com/hugo-sid/hugo-blog-awesome.git
 
+[submodule "themes/holy"]
+	path = themes/holy
+	url = https://github.com/serkodev/holy.git
