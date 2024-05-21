@@ -1,7 +1,7 @@
 +++
 title = 'Vulnerable Driver Reversal'
 date = 2023-11-01T21:44:49+01:00
-draft = false
+draft = true
 +++
 
 
@@ -318,9 +318,10 @@ The virtual memory manager does not ensure memory allocated in system space will
 ## Free Contiguous Memory
 
 ```cpp
-        case 0x222884u:
-          MmFreeContiguousMemorySpecifyCache(*(uint64_t*)(SystemBuffer + 8), *(unsigned int *)SystemBuffer, 0i64);
-          goto LABEL_132;
+  case 0x222884u:
+    MmFreeContiguousMemorySpecifyCache(*(uint64_t*)(SystemBuffer + 8), 
+            *(unsigned int *)SystemBuffer, 0i64);
+    goto LABEL_132;
 ```
 
 Using the tactics described in the previous section, we can construct our communication buffer and send a request to the vulnerable driver with the appropriate control code `0x222884`. The driver allows us to specify the range (size) we want to free, which will be the second subobject in the buffer, and of course the starting address of the buffer that is to be freed, which will be the first. Like last time, we can pass a normal array or a structure, but the maximum number of subobjects is 2. The structure would consist of an int32 and an `int64` in that order, and the array would have to be of type `int64`. I will show the code example below using a structure this time, so we know how to communicate in both ways.

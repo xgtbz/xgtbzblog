@@ -2,20 +2,20 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>https://xgtbz.github.io/xgtbzblog/</loc>
+    <loc>http://localhost:1313/xgtbzblog/</loc>
     <lastmod>2024-04-21T13:54:05+01:00</lastmod>
   </url><url>
-    <loc>https://xgtbz.github.io/xgtbzblog/posts/</loc>
+    <loc>http://localhost:1313/xgtbzblog/posts/</loc>
     <lastmod>2024-04-21T13:54:05+01:00</lastmod>
   </url><url>
-    <loc>https://xgtbz.github.io/xgtbzblog/posts/vmt-hook/</loc>
+    <loc>http://localhost:1313/xgtbzblog/posts/vmt-hook/</loc>
     <lastmod>2023-12-19T21:44:49+01:00</lastmod>
   </url><url>
-    <loc>https://xgtbz.github.io/xgtbzblog/posts/vulnerable-driver-reversal/</loc>
+    <loc>http://localhost:1313/xgtbzblog/posts/vulnerable-driver-reversal/</loc>
     <lastmod>2023-11-01T21:44:49+01:00</lastmod>
   </url><url>
-    <loc>https://xgtbz.github.io/xgtbzblog/categories/</loc>
+    <loc>http://localhost:1313/xgtbzblog/categories/</loc>
   </url><url>
-    <loc>https://xgtbz.github.io/xgtbzblog/tags/</loc>
+    <loc>http://localhost:1313/xgtbzblog/tags/</loc>
   </url>
 </urlset>
