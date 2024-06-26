@@ -1,7 +1,7 @@
 +++
 title = 'Virtual Method Table Hook'
 date = 2023-12-19T21:44:49+01:00
-draft = true
+draft = false
 +++
 
 
@@ -16,7 +16,7 @@ Binding (aka dispatching) is simply associating a function call with its definit
 ```cpp
 struct Example
 {
-   [[noreturn]] void IsEven(int Number) const noexcept(true)
+   void IsEven(int Number) const noexcept(true)
    {
      std::cout << ( ( Number % 2 ) ? "Is Odd" : "Is Even" );
    }

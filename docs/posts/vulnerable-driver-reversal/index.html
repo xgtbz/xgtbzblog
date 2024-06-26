@@ -3,11 +3,11 @@
 <meta http-equiv="content-type" content="text/html">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title itemprop="name">Vulnerable Driver Reversal | </title>
-<meta property="og:title" content="Vulnerable Driver Reversal | " />
-<meta name="twitter:title" content="Vulnerable Driver Reversal | " />
-<meta itemprop="name" content="Vulnerable Driver Reversal | " />
-<meta name="application-name" content="Vulnerable Driver Reversal | " />
+<title itemprop="name">Vulnerable Driver Reversal</title>
+<meta property="og:title" content="Vulnerable Driver Reversal" />
+<meta name="twitter:title" content="Vulnerable Driver Reversal" />
+<meta itemprop="name" content="Vulnerable Driver Reversal" />
+<meta name="application-name" content="Vulnerable Driver Reversal" />
 <meta property="og:site_name" content="" />
 
 <meta name="description" content="">
@@ -53,7 +53,7 @@
         },
         "datePublished": "2023-11-01",
         "description": "",
-        "wordCount":  5506 ,
+        "wordCount":  5502 ,
         "mainEntityOfPage": "True",
         "dateModified": "2023-11-01",
         "image": {
@@ -62,7 +62,7 @@
         },
         "publisher": {
         "@type": "Organization",
-        "name": ""
+        "name": "xgtbz"
         }
     }
     </script>
@@ -73,7 +73,7 @@
     
 
     <link rel="canonical" href="http://localhost:1313/xgtbzblog/posts/vulnerable-driver-reversal/">
-    <link href="/xgtbzblog/style.min.18927ce2d0dc33c991e188f9b4efd25929b9589151125f809e2b3f45e447e971.css" rel="stylesheet">
+    <link href="/xgtbzblog/style.min.760d8a4360aca73b676e056d7baae5840276d5f3933ff971780d00c0a2a2bcb3.css" rel="stylesheet">
     <link href="/xgtbzblog/code-highlight.min.706d31975fec544a864cb7f0d847a73ea55ca1df91bf495fd12a177138d807cf.css" rel="stylesheet">
 
     
@@ -294,7 +294,7 @@ call    cs:IoCreateSymbolicLink
 </table>
 <p>So now you should understand step 5 of <code>DeviceIoControl</code> better - the control flow was passed to the dispatch routine responsible for responding to <code>DeviceControl</code> requests. Now you have a fundamental understanding of <code>IOCTL</code>, we can start our journey on cracking the control codes &amp; communication structures.</p>
 <h2 id="locating-the-devicecontrol-dispatch-routine">Locating the DeviceControl dispatch routine</h2>
-<p>Getting a pointer to the <code>DeviceControl</code> dispatch routine is extremely easy. Given that the <code>IRP_MJ_DEVICE_CONTROL</code> constant is of value 0xE (meaning the <code>DeviceControl</code> dispatch routine is index 14 in the MajorFunction array), and that the start of the <code>MajorFunction</code> array is 0x70 bytes from the DriverObject, <strong>we can say that: offset_from_driver_object - 0x70 = 0x70, because 0x70 / sizeof(unsigned long long) = 0xE</strong> . Therefore, <strong>0x70 + 0x70 = offset_from_driver_object (0xE0)</strong>. We divide 0x70 from sizeof(unsigned long long), because each entry in the array is a pointer that occupies 8 bytes in memory.</p>
+<p>Getting a pointer to the <code>DeviceControl</code> dispatch routine is extremely easy. Given that the <code>IRP_MJ_DEVICE_CONTROL</code> constant is of value 0xE (meaning the <code>DeviceControl</code> dispatch routine is index 14 in the MajorFunction array), and that the start of the <code>MajorFunction</code> array is 0x70 bytes from the DriverObject, we can say that: <strong><code>offset_from_driver_object</code> - 0x70 = 0x70</strong> because <strong>0x70 / 8 = 0xE</strong> . Therefore, <strong>0x70 + 0x70 = <code>offset_from_driver_object</code> (0xE0)</strong>. We divide 0x70 by 8 because each entry in the array is a pointer that occupies 8 bytes in memory.</p>
 <p>Still within the <code>OEP</code>, we can easily distinguish the <code>DeviceControl</code> dispatch routine from other dispatch routines now that we know the offset - the function being written to <strong><code>DriverObject</code> + 0xE0</strong>. The psuedocode below also depicts how a single dispatch routine can be used to handle multiple I/O operations, as described earlier.</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (NT_SUCCESS(IoCreateSymbolicLink(<span style="color:#f92672">&amp;</span>devincename, <span style="color:#f92672">&amp;</span>DestinationString)))
 </span></span><span style="display:flex;"><span>  {
@@ -371,7 +371,7 @@ call    cs:IoCreateSymbolicLink
 </span></span><span style="display:flex;"><span>  CommunicationBuffer[<span style="color:#ae81ff">1</span>] <span style="color:#f92672">=</span> MmGetPhysicalAddress(ContiguousMemorySpecifyCache);
 </span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>i64;
 </span></span><span style="display:flex;"><span>}
-</span></span></code></pre></div><p>The first important thing we should take notice of in this psuedocode is the write to <code>CommunicationBuffer + 1</code>. In C, we know that an array is just a pointer to the first element in a range of contiguous elements, so  <code>*((QWORD *)CommunicationBuffer + 1)</code> must be identical to <code>CommunicationBuffer[1]</code>. So straight away, we know when this dispatch routine handler is invoked, it takes the input buffer and makes a write 8 bytes down with the value 0. The use and type of the previous 8 bytes below the starting address of the write are currently unknown. They could be two 32-bit integers, one 64-bit integer, 8 8-bit integers etc; right now we just know that 8 bytes down the start of the buffer is a 64-bit integer, because of the 0i64 written into it. Now you may have falsely made the assumption that because 8 bytes down the buffer is a 64-bit integer, the first subobject in this contiguous buffer is guaranteed to be a 64-bit integer, because arrays always consists of subojects of the same type. However, it is not mandatory that the buffer in <code>METHOD_BUFFERED</code> <code>IOCTL</code> operations must be an array. They can be structures or trivial classes in which the space occupied by each suboject in the buffer differs, an array of heterogenous objects - this is actually quite common. So, when deducing the type of an element in the buffer/communication structure, it should not be generalised based on the type of one of its members in the contiguous array, but how it is used within the dispatch routine (or the routine called by the dispatch routine that maps to the control code specified). In this case, the subojects are of the same type, so the buffer can be constructed as a normal array. I came to this conclusion by looking at the use of the first subobject, and we see it&rsquo;s the first argument in <code>MmAllocateContiguousMemorySpecifyCache</code>. The documentation for this routine states that this argument should be of type <code>int64</code>, which is the same type as the second subobject in the buffer. Furthermore, the purpose of this argument is to represent the amount of bytes that should be allocated with <code>MmAllocateContiguousMemorySpecifyCache</code>, so the first subobject in our buffer should be representative of this. The use of the second argument is better understood if the buffer were manipulated structurally, so I&rsquo;ve casted the buffer to a <code>UNICODE_STRING</code>, which you can see below, along with the layout of <code>UNICODE_STRING</code></p>
+</span></span></code></pre></div><p>The first important thing we should take notice of in this psuedocode is the write to <code>CommunicationBuffer + 1</code>. In C, we know that an array will decay to a pointer to the first element in a range of contiguous elements, so  <code>*((QWORD *)CommunicationBuffer + 1)</code> must be identical to <code>CommunicationBuffer[1]</code>. So straight away, we know when this dispatch routine handler is invoked, it takes the input buffer and makes a write 8 bytes down with the value 0. The use and type of the previous 8 bytes below the starting address of the write are currently unknown. They could be two 32-bit integers, one 64-bit integer, 8 8-bit integers etc; right now we just know that 8 bytes down the start of the buffer is a 64-bit integer, because of the 0i64 written into it. Now you may have falsely made the assumption that because 8 bytes down the buffer is a 64-bit integer, the first subobject in this contiguous buffer is guaranteed to be a 64-bit integer, because arrays always consists of subojects of the same type. However, it is not mandatory that the buffer in <code>METHOD_BUFFERED</code> <code>IOCTL</code> operations must be an array. They can be structures or trivial classes in which the space occupied by each suboject in the buffer differs, essentially a heterogeneous array - this is actually quite common. So, when deducing the type of an element in the buffer/communication structure, it should not be generalised based on the type of one of its members in the contiguous array, but how it is used within the dispatch routine (or the routine called by the dispatch routine that maps to the control code specified). In this case, the subojects are of the same type, so the buffer can be constructed as a normal array. I came to this conclusion by looking at the use of the first subobject, and we see it&rsquo;s the first argument in <code>MmAllocateContiguousMemorySpecifyCache</code>. The documentation for this routine states that this argument should be of type <code>int64</code>, which is the same type as the second subobject in the buffer. Furthermore, the purpose of this argument is to represent the amount of bytes that should be allocated with <code>MmAllocateContiguousMemorySpecifyCache</code>, so the first subobject in our buffer should be representative of this. The use of the second argument is better understood if the buffer were manipulated structurally, so I&rsquo;ve casted the buffer to a <code>UNICODE_STRING</code>, which you can see below, along with the layout of <code>UNICODE_STRING</code></p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">_UNICODE_STRING</span>
 </span></span><span style="display:flex;"><span>{
 </span></span><span style="display:flex;"><span>    USHORT Length;                                                          <span style="color:#75715e">//0x0
