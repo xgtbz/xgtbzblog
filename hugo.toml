@@ -1,6 +1,6 @@
 baseURL = 'https://xgtbz.github.io/xgtbzblog/'
 languageCode = 'en-us'
-title = 'R'
+title = 'Rvcx cv'
 theme = 'hugo-blog-awesome'
 publishDir = "docs"
 
