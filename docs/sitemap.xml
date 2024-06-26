@@ -2,17 +2,11 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>http://localhost:1313/xgtbzblog/posts/physical-virtual-mapping/</loc>
-    <lastmod>2024-04-21T13:54:05+01:00</lastmod>
-  </url><url>
     <loc>http://localhost:1313/xgtbzblog/posts/</loc>
     <lastmod>2024-04-21T13:54:05+01:00</lastmod>
   </url><url>
     <loc>http://localhost:1313/xgtbzblog/</loc>
     <lastmod>2024-04-21T13:54:05+01:00</lastmod>
-  </url><url>
-    <loc>http://localhost:1313/xgtbzblog/posts/vmt-hook/</loc>
-    <lastmod>2023-12-19T21:44:49+01:00</lastmod>
   </url><url>
     <loc>http://localhost:1313/xgtbzblog/categories/</loc>
   </url><url>
