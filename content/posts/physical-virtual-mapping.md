@@ -1,16 +1,16 @@
 +++
-title = 'Physical to Virtual Mapping'
+title = 'Recursive Page Tables on Windows'
 date = 2024-04-21T13:54:05+01:00
-draft = true
+draft = false
 +++
 
 ## Preliminary
 
-In this short blog post, we will be dissecting the innards of routines such as `MmMapLockedPages` and `MmMapIoSpace` to understand how the Virtual Memory Manager (`VMM`) maps physical memory to the kernel virtual address (`VA`) space at a high level. Mapping physical memory is a powerful technique that can be utilised for several purposes, such as overwriting read only virtual memory without changing the protection, and updating paging structures themselves. The point of this blog post isn't to meticulously demonstrate each & every feature involved, but to explain general concepts with the appropriate detail for practical use and development. We will begin by describing the different uses of mapping physical memory throughout the operating system (`OS`).
+In this short blog post, we will try to understand how the Virtual Memory Manager (`VMM`) maps physical memory to the kernel virtual address (`VA`) space at a high level. Mapping physical memory is a powerful technique that can be utilised for several purposes, such as overwriting read only virtual memory without changing the protection, and updating paging structures themselves. The point of this blog post isn't to meticulously demonstrate each & every feature involved, but to explain general concepts with the appropriate detail for practical use and development. We will begin by describing the different uses of mapping physical memory throughout the operating system, and how paging structure entries themselves are manipulated.
 
 ## PML4 Auto Entry
 
-As we all know, paging structure entries, `PxE`s (e.g `PDPTe`, `PTE`, `PML4e`), are consulted during the virtual to physical translation process to provide information on a given virtual range. They contain useful data required in the translation process, such as the `PFN` to the next paging structure ( or the target physical address be it the `PDE/PTE` ), the `G` bit which indicates if entries should remain in the `TLB` after a new `CR3` is loaded, and the `R/W` bit. The `VMM` must constantly update these structures to reflect the current state of a given virtual memory range, for example, when a `VA` is written to for the first time the `dirty bit` in the `PTE/PDE` must be set. However, these paging structure entries reside in physical memory, and processor instructions only use `VA`s, so how does the `VMM` update these structures using their physical addresses? The answer is: the physical addresses of `PxEs` are mapped to `VA`s via the `PML4` Auto Entry.
+As we all know, paging structure entries, `PxE`s (e.g `PDPTe`, `PTE`, `PML4e`), are consulted during the virtual to physical translation process to provide information on a given virtual range. They contain useful data required in the translation process, such as the `PFN` to the next paging structure ( or the target physical address be it the `PDE/PTE` ), the `G` bit which indicates if entries should remain in the `TLB` after a new `CR3` is loaded, the `R/W` bit and more. The `VMM` must constantly update these structures to reflect the current state of a given virtual memory range, for example, when a `VA` is written to for the first time the `dirty bit` in the `PTE/PDE` must be set. However, these paging structure entries reside in physical memory, and processor instructions only use `VA`s, so how does the `VMM` update these structures using their physical addresses? The answer is: the physical addresses of `PxEs` are mapped to `VA`s themselves via the `PML4` Auto Entry mechanism.
 
 The Auto entry is an entry within the `PML4` that references the `PML4` again instead of providing the `PFN` to the next paging structure (which would be the `PDPT`). This lags the whole translation behind, so we end up with a virtual address mapping the page table itself. Let's pretend the auto entry is at index `0x15f` and understand what happens step by step:
 
@@ -33,13 +33,17 @@ The `VA` mapping the lowest (first) `PTE` is known as the `PteBase`, and is also
 ## Operating System Use Cases
 ### → Working Set Trimming
 
-Another example of when the `VA` mapping a paging structure is consulted is during working set trimming. Working set list entries (`WSLe`) are kept in no particular order in the Working Set List (`WSL`), so given a regular virtual address that has been removed from a `WS` how does the `VMM` locate the corresponding `WSLe` to dicard? Well, it turns out the `VA` of the `PTE` for that virtual address is computed ( via `MiDeleteVirtualAddresses` → `MiDeletePagablePteRange` → `MiFillPteHierarchy` ), then used to resolve the `PFN`, which can be used as an index into the `PFN` Database, returning the corresponding `MMPFN` structure. Now, the appropriate `WSL` index can be extracted by the `VMM` from the `MMPFN` structure. Let's decipher the computation performed by `MiGetPteAddress`:
+Another example of when the `VA` mapping a paging structure is consulted is during [working set trimming](https://learn.microsoft.com/en-us/windows/win32/memory/working-set). Working set list entries (`WSLe`) are kept in no particular order in the Working Set List (`WSL`), so given a regular virtual address that has been removed from a working set how does the `VMM` locate the corresponding `WSLe` to discard? Well, it turns out the `VA` of the `PTE` for that virtual address is computed ( via  → `MiFillPteHierarchy/MiGetPteAddress` ), then used to resolve the `PFN`, which can be used as an index into the `PFN` Database, returning the corresponding `MMPFN` structure. Now, the appropriate `WSL` index can be extracted by the `VMM` from the `MMPFN` structure. Let's decipher the computation performed by `MiGetPteAddress`.
 
-```cpp
-__int64 __fastcall MiGetPteAddress(unsigned __int64 VirtualAddress)
-{
-  return ((VirtualAddress >> 9) & 0x7FFFFFFFF8i64) - 0x98000000000i64;
-}
+```nasm   
+MiGetPteAddress proc near VirtualAddress:qword             
+shr     rcx, 9
+mov     rax, 7FFFFFFFF8h
+and     rcx, rax
+mov     rax, 0FFFFF68000000000h
+add     rax, rcx
+retn
+MiGetPteAddress endp
 ```
 
 This calculation consists of:
@@ -47,20 +51,24 @@ This calculation consists of:
 
 * Setting the least significant 3 bits to 0
 
-* Subtracting some hardcoded value 0x98000000000
+* Adding some hardcoded value 0FFFFF68000000000h
 
-This hardcoded value is suppose to represent the `PteBase`, which is dynamically retrieved at `run-time` based off the auto-entry. Earlier, we looked at how the auto-entry lags the translation process behind, but now we've shifted the virtual address by 9 bits to the right, so the `PDPT` offset is applied to the `PML4` slot. So now, during translation, the `PML4` is not referenced more than once ( only from the `CR3` now ). So in essence, this translation gives us another `VA`, which maps the `PT` used to map the `VirtualAddress` field we passed to the routine. The `PT` index is used as an offset in the `PT` to resolve the `PTE`, so we end up with the `VA` of the `PTE`.
+This hardcoded value is suppose to represent the `PteBase`, which is dynamically retrieved at `run-time` based off the auto-entry. Earlier, we looked at how the auto-entry lags the translation process behind, but now we've shifted the virtual address by 9 bits to the right, so the `PDPT` offset is applied to the `PML4` slot. So now, during translation, the `PML4` is not referenced more than once ( only from the `CR3` now ). So in essence, this translation gives us another `VA`, which maps the `PT` used to map the `VirtualAddress` field we passed to the routine. The `PT` index is used as an offset in the `PT` to resolve the `PTE`, so we end up with the `VA` of the `PTE`. Below you can see the resolved virtual address of the `PteBase` at runtime, which used to be constant prior to the `PML4` auto entry changing on boot.
+
+![Image](https://i.ibb.co/KV8BK7J/mi-get-pte-runtime-jpg.png)
+
+Interestingly enough, the entire virtual address range used to map `PxEs`, known as pte space, is the same for every process, but of course swapping `CR3` establishes an entirely different translation.
 
 ### → Demand Zero Fault
 
-On Windows, newly allocated virtual addresses aren't mapped to physical pages until they are initially referenced. This means when a virtual address is referenced for the first time, a page fault is triggered and the `VMM` allocates a new physical page to map to the virtual address. These pages are known as zero initialised pages & are found on the `Zero List`, hence "**demand zero fault**". Zero initialised pages have no `PTE` pointing to them, they are free for the `VMM` to use to map to new virtual addresses. However, when the `Zero List` is empty, the `VMM` consults the `Free List` to steal a free page that can be used for the mapping. The free list contains pages that aren't being pointed to by any `PTE`, however, they were once pointed to by a `PTE` and still contain the stale data from the old `VA` it was mapped to. So, before pages from the free list can be used, they must be zeroed, their contents have to be erased. However, this brings the same problem as before, pages on the free list aren't mapped to any VA and processor instructions do not interface directly with physical instructions; so they must be mapped to `VAs` in order to be zeroed.
+On Windows, newly allocated virtual addresses aren't mapped to physical pages until they are initially referenced. This means when a virtual address is referenced for the first time, a [page fault](https://en.wikipedia.org/wiki/Page_fault) is triggered and the `VMM` allocates a new physical page to map to the virtual address. These pages are known as zero initialised pages & are found on the `Zero List`, hence "**demand zero fault**". Zero initialised pages have no `PTE` pointing to them, they are free for the `VMM` to use to map to new virtual addresses. However, when the `Zero List` is empty, the `VMM` consults the `Free List` to steal a free page that can be used for the mapping . The free list contains pages that aren't being pointed to by any `PTE`, however, they were once pointed to by a `PTE` and still contain the stale data from the old `VA` it was mapped to. So, before pages from the free list can be used, they must be zeroed, their contents have to be erased. However, this brings the same problem as before, pages on the free list aren't mapped to any VA and processor instructions do not interface directly with physical instructions; so they must be mapped to `VAs` in order to be zeroed.
 
-There is a special system thread dedicated to zeroing pages from the free list, known as the `Zero Page Thread`. This executes `MiZeroPhyscialPage` which calls `MiMapPageInHyperspaceWorker` to perform the mapping. Interestingly, `MiMapPageInHyperspaceWorker` uses a single `VA` to map free pages to be zeroed, meaning every call to `MiMapPageInHyperspaceWorker` must be followed with a subsequent call to `MiUnmapPageInHyperspaceWorker`. To ensure this condition is satisfied, the routine raises the `IRQL` to `DPC` to prevent preemption, the second argument to `MiUnmapPageInHyperspaceWorker` being the `IRQL` before it was raised. Now we've looked at how physical memory is mapped to virtual memory by the `OS`, we should shift our focus to examining the different ways that mapping physical memory can be leveraged by an attacker in `ring 0`, and how it works for different routines such as `MmMapMapLockedPagesSpecifyCache`
+There is a special system thread dedicated to zeroing pages from the free list, known as the `Zero Page Thread`. This executes `MiZeroPhyscialPage` which calls `MiMapPageInHyperspaceWorker` to perform the mapping (which will actually map the pages in the system pte range as opposed to hyperspace). Interestingly, `MiMapPageInHyperspaceWorker` uses a single `VA` to map free pages to be zeroed, meaning every call to `MiMapPageInHyperspaceWorker` must be followed with a subsequent call to `MiUnmapPageInHyperspaceWorker`. To ensure this condition is satisfied, the routine raises the `IRQL` to `DPC` to prevent thread preemption, the second argument to `MiUnmapPageInHyperspaceWorker` being the `IRQL` before it was raised. Now we've looked at why physical memory is mapped to virtual memory by the `OS`, we should shift our focus to examining the different ways that mapping physical memory can be leveraged by an attacker in ring 0.
 
 ## Memory Descriptor Lists
 
 As Microsoft Documentation states, a Memory Descriptor List (`MDL`) is used to describe the physical layout of a virtual memory range. This is because contiguous virtual memory may be scattered in physical memory as a result of fragmentation. A common techqniue used by attackers to overwrite read-only memory (`ROM`) is to allocate an `MDL` to describe some virtual memory buffer, and then map the physical pages, that are stored in the `MDL`, corresponding to the virtual memory buffer to another virtual range with a different memory protection. This gives you two separate virtual address ranges that resolve to the same physical address, but have different memory protections, analogous to two separate views of a section oject.
-The code below demonstrates this technique.
+The (psuedo) code below demonstrates this technique.
 
 ```cpp
 bool OverwriteRom(void* VA, void* NewValue, uint64 Size) {
@@ -81,9 +89,6 @@ bool OverwriteRom(void* VA, void* NewValue, uint64 Size) {
         MmUnlockPages(Mdl);
         return false;
     }
-
-    // Change the protection of the mapped range
-    MmProtectMdlSystemAddress(Mdl, PAGE_READWRITE);
 
     // Write to the mapped RW range
     RtlCopyMemory(MappedRange, NewValue, Size) 
@@ -112,13 +117,49 @@ bool OverwriteRom(void* VA, void* NewValue, uint64 Size) {
 }
 ```
 
-When we statically analyse both of these routines to understand how the mapping works, we end up with a call to `MiReservePtes` in both cases. A global qword passed as the first argument, and a 32-bit integer as the next. To understand the purpose of this function and their arguments, we should be aware of how the `VMM` manages the `system PTE range`, and what it is used for.
+Now it's time we understand how the mapping is actually implemented behind the scenes. Let's begin reversing the logic of both `MmMapIoSpace` and `MmMapLockedPagesSpecifyCache`, starting with the former. Microsoft's documentation states the purpose of this routine is to map the physical address range to nonpaged system space, allowing us to specify the physical address, the size and the cache type.
 
 ```cpp
-MiReservePtes((__int64)&qword_140C69600, (unsigned int)v13);
+PVOID MmMapIoSpace(
+  [in] PHYSICAL_ADDRESS    PhysicalAddress,
+  [in] SIZE_T              NumberOfBytes,
+  [in] MEMORY_CACHING_TYPE CacheType
+);
+```
+It returns to us the base virtual address that maps to the physical memory, as stated in the documentation, and when we view the disassembly we can see that routine is just a wrapper around `MmMapIoSpaceEx` that decides the protection of the virtual memory based off of the cache type.
+
+```nasm                                        
+sub     rsp, 40        
+movzx   eax, r8b
+cmp     eax, dword ptr MmMaximumCacheType   
+jnb     short InvalidCacheType
+mov     r8d, 40h ; RWX
+cmp     eax, dword ptr MmCached
+jz      short MmCachedLocation
+cmp     eax, MmWriteCombined
+mov     r8d, 240h ; RWX + NoCache
+mov     r9d, 404h ; RW + WriteCombined
+cmovz   r8d, r9d
+
+MmCachedLocation:                              
+call    MmMapIoSpaceEx
+
+Return:                                
+add     rsp, 40
+retn
+
+align 2
+
+InvalidCacheType:                      
+xor     eax, eax
+jmp     short Return
 ```
 
-## MiReservePtes
+It starts off by decrementing the stack pointer for shadow space and to ensure `RSP` is correctly aligned on a 16-byte boundary as the `Ms-ABI` expects. If the cache type specified is `MmNonCached` or `MmCached`, then execution is passed to `MmMapIoSpaceEx` with the protection being `RWX` ( the only difference between the extended version of this routine is the last argument being the protection rather than the cache type ). If the cache type specified is `MmWriteCombined`, then the protection is `RW`. The routine will fail if the specified cache type is not in the stipulated range, which you can find [here](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ne-wdm-_memory_caching_type). `MmMapIoSpaceEx` is just a wrapper around `MiMapContiguousMemory`, so we'll continue reversing from there.
+
+`MiMapContiguousMemory` initially performs some rudimentary sanity checks and returns instantly if some invariants don't hold to be true. Then, it checks if the physical pages are large pages, and if so control is passed over to `MiMapContiguousMemoryLarge`. The two routines that actually perform the mapping are `MiReservePtes` and `
+
+## System PTE Range
 
 The `system pte` region is a dynamically allocated portion of the kernel virtual address space housing `MDL` mappings, drivers, kernel stacks and more. To manage this region, the `VMM` maintains two structures of type `MI_SYSTEM_PTE_TYPE` named `MiSystemPteInfo` and `MiKernelStackPteInfo`.
 
@@ -144,7 +185,7 @@ struct _MI_SYSTEM_PTE_TYPE
 }; 
 ```
 
-The first field is a `bitmap` representing a portion of the system `pte` range. Each bit corresponds to a `large page`, 2MB, however keep in mind regular pages can be allocated within this region. These buffers are stored at the start of system `pte` region themselves, adjacently, with 4MB reserved for each of them, so 8MB of the system `pte` range is reserved for this purpose. Allocations to this region are perfomed via a call to `MiReservePtes`, which takes one of these `bitmaps` as its first argument - the second being the amount of pages to be reserved. From this, we can deduce that `MiReservePte`s can be used to reserve a virtual address to map physical pages into. The routine that actually implements the physical memory mapping using the `PTEs` allocated by `MiReservePtes` is `MiFillSystemPtes`, while `MiExpandPtes` is used to assign free large pages to the `bitmap`.
+The first field is a `bitmap` representing a portion of the system `pte` range. Each bit corresponds to a `large page`, 2MB, however keep in mind regular pages can be allocated within this region. These buffers (structures) are stored at the start of system `pte` region themselves, adjacently, with 4MB reserved for each of them, so 8MB of the start of the system `pte` range is reserved for this purpose. Allocations to this region are perfomed via a call to `MiReservePtes`, which takes one of these `bitmaps` as its first argument - the second being the amount of pages to be reserved. From this, we can deduce that `MiReservePte`s can be used to reserve a virtual address to map physical pages into. The routine that actually implements the physical memory mapping using the `PTEs` allocated by `MiReservePtes` is `MiFillSystemPtes`, while `MiExpandPtes` is used to assign free large pages to the `bitmap`.
 
 
 

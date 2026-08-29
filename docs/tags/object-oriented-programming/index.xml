@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Object Oriented Programming on cmov</title>
+    <link>http://localhost:1313/xgtbzblog/tags/object-oriented-programming/</link>
+    <description>Recent content in Object Oriented Programming on cmov</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Tue, 19 Dec 2023 21:44:49 +0100</lastBuildDate><atom:link href="http://localhost:1313/xgtbzblog/tags/object-oriented-programming/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Virtual Method Table Hook</title>
+      <link>http://localhost:1313/xgtbzblog/posts/vmt-hook/</link>
+      <pubDate>Tue, 19 Dec 2023 21:44:49 +0100</pubDate>
+      
+      <guid>http://localhost:1313/xgtbzblog/posts/vmt-hook/</guid>
+      
+      <description>&lt;h2 id=&#34;preliminary&#34;&gt;Preliminary&lt;/h2&gt;
+&lt;p&gt;Virtual method tables (aka &lt;code&gt;VMTs&lt;/code&gt;, &lt;code&gt;vtables&lt;/code&gt;, &lt;code&gt;vftables&lt;/code&gt; or dispatch tables) are an array of pointers to virtual methods of a class. They contain all the class&amp;rsquo;s dynamically bound functions (virtual functions), and they are used to implement dynamic dispatch - which is deciding which implementation of a &lt;a href=&#34;https://en.wikipedia.org/wiki/Ad_hoc_polymorphism&#34;&gt;polymorphic operation&lt;/a&gt; should be called at run-time. These tables exist at a class level, meaning multiple instances (objects with identity) of the same class share the same &lt;code&gt;VMT&lt;/code&gt;. In this blog, you will learn about devirtualisation, what dynamic dispatch is, how to exploit/hook &lt;code&gt;VMTs&lt;/code&gt;, understand virtual destructors and virtual pointers, learn about the flaws of dynamic dispatch within C++ and how these virtual function tables are used to implement dynamic dispatch.&lt;/p&gt;</description>
+      
+    </item>
+    
+  </channel>
+</rss>

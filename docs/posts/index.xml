@@ -1,11 +1,67 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Posts on xgtbz</title>
+    <title>Posts on cmov</title>
     <link>http://localhost:1313/xgtbzblog/posts/</link>
-    <description>Recent content in Posts on xgtbz</description>
+    <description>Recent content in Posts on cmov</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Sun, 21 Apr 2024 13:54:05 +0100</lastBuildDate><atom:link href="http://localhost:1313/xgtbzblog/posts/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Sun, 23 Feb 2025 21:44:49 +0100</lastBuildDate><atom:link href="http://localhost:1313/xgtbzblog/posts/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Translation Lookaside Buffer Splitting</title>
+      <link>http://localhost:1313/xgtbzblog/posts/tlb-splitting/</link>
+      <pubDate>Sun, 23 Feb 2025 21:44:49 +0100</pubDate>
+      
+      <guid>http://localhost:1313/xgtbzblog/posts/tlb-splitting/</guid>
+      
+      <description>&lt;h2 id=&#34;introduction&#34;&gt;Introduction&lt;/h2&gt;
+&lt;h2 id=&#34;address-translation&#34;&gt;Address Translation&lt;/h2&gt;
+&lt;h2 id=&#34;tlb-microarchitecture&#34;&gt;TLB Microarchitecture&lt;/h2&gt;
+&lt;h2 id=&#34;pax-nx-emulation&#34;&gt;PaX NX Emulation&lt;/h2&gt;
+&lt;h2 id=&#34;shadow-walker&#34;&gt;Shadow Walker&lt;/h2&gt;
+&lt;h2 id=&#34;tlb-in-a-virtualised-environment&#34;&gt;TLB in a virtualised environment&lt;/h2&gt;
+&lt;h3 id=&#34;-shadow-page-tables&#34;&gt;→ Shadow page tables&lt;/h3&gt;
+&lt;h3 id=&#34;-extended-page-tables&#34;&gt;→ Extended page tables&lt;/h3&gt;
+&lt;h2 id=&#34;implementing-tlb-splitting-in-a-vt-x-hypervisor&#34;&gt;Implementing TLB splitting in a VT-x hypervisor&lt;/h2&gt;
+&lt;h3 id=&#34;--stlb&#34;&gt;-&amp;gt; STLB&lt;/h3&gt;</description>
+      
+    </item>
+    
+    <item>
+      <title>Recursive Page Tables on Windows</title>
+      <link>http://localhost:1313/xgtbzblog/posts/physical-virtual-mapping/</link>
+      <pubDate>Sun, 21 Apr 2024 13:54:05 +0100</pubDate>
+      
+      <guid>http://localhost:1313/xgtbzblog/posts/physical-virtual-mapping/</guid>
+      
+      <description>&lt;h2 id=&#34;preliminary&#34;&gt;Preliminary&lt;/h2&gt;
+&lt;p&gt;In this short blog post, we will try to understand how the Virtual Memory Manager (&lt;code&gt;VMM&lt;/code&gt;) maps physical memory to the kernel virtual address (&lt;code&gt;VA&lt;/code&gt;) space at a high level. Mapping physical memory is a powerful technique that can be utilised for several purposes, such as overwriting read only virtual memory without changing the protection, and updating paging structures themselves. The point of this blog post isn&amp;rsquo;t to meticulously demonstrate each &amp;amp; every feature involved, but to explain general concepts with the appropriate detail for practical use and development. We will begin by describing the different uses of mapping physical memory throughout the operating system, and how paging structure entries themselves are manipulated.&lt;/p&gt;</description>
+      
+    </item>
+    
+    <item>
+      <title>Virtual Method Table Hook</title>
+      <link>http://localhost:1313/xgtbzblog/posts/vmt-hook/</link>
+      <pubDate>Tue, 19 Dec 2023 21:44:49 +0100</pubDate>
+      
+      <guid>http://localhost:1313/xgtbzblog/posts/vmt-hook/</guid>
+      
+      <description>&lt;h2 id=&#34;preliminary&#34;&gt;Preliminary&lt;/h2&gt;
+&lt;p&gt;Virtual method tables (aka &lt;code&gt;VMTs&lt;/code&gt;, &lt;code&gt;vtables&lt;/code&gt;, &lt;code&gt;vftables&lt;/code&gt; or dispatch tables) are an array of pointers to virtual methods of a class. They contain all the class&amp;rsquo;s dynamically bound functions (virtual functions), and they are used to implement dynamic dispatch - which is deciding which implementation of a &lt;a href=&#34;https://en.wikipedia.org/wiki/Ad_hoc_polymorphism&#34;&gt;polymorphic operation&lt;/a&gt; should be called at run-time. These tables exist at a class level, meaning multiple instances (objects with identity) of the same class share the same &lt;code&gt;VMT&lt;/code&gt;. In this blog, you will learn about devirtualisation, what dynamic dispatch is, how to exploit/hook &lt;code&gt;VMTs&lt;/code&gt;, understand virtual destructors and virtual pointers, learn about the flaws of dynamic dispatch within C++ and how these virtual function tables are used to implement dynamic dispatch.&lt;/p&gt;</description>
+      
+    </item>
+    
+    <item>
+      <title>Vulnerable Driver Reversal</title>
+      <link>http://localhost:1313/xgtbzblog/posts/vulnerable-driver-reversal/</link>
+      <pubDate>Wed, 01 Nov 2023 21:44:49 +0100</pubDate>
+      
+      <guid>http://localhost:1313/xgtbzblog/posts/vulnerable-driver-reversal/</guid>
+      
+      <description>&lt;h2 id=&#34;preliminary&#34;&gt;Preliminary&lt;/h2&gt;
+&lt;p&gt;Any driver that communicates with a user-mode application is potentially vulnerable. The privileges exposed by a driver through communication are not exclusively limited to a specific user-mode application (unless the driver takes an extra step to validate a specific process, which is rare), therefore they can be reverse engineered, exploited and leveraged by any program running in &lt;code&gt;ring 3&lt;/code&gt;. In the past, malware developers have exploited vulnerable drivers to manipulate &lt;code&gt;MSRs&lt;/code&gt;, allocate &lt;code&gt;RWX&lt;/code&gt; memory in the kernel virtual address space to execute shellcode, patch system calls, or even manually map an unsigned driver - this blog post demonstrates nothing new. However, Microsoft is often quick to revoke the signatures of drivers that they consider vulnerable, which may make it problematic to find a working vulnerable driver with a viable signature on the latest versions of windows.&lt;/p&gt;</description>
+      
+    </item>
+    
   </channel>
 </rss>

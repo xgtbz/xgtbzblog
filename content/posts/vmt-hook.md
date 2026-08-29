@@ -1,17 +1,19 @@
 +++
 title = 'Virtual Method Table Hook'
 date = 2023-12-19T21:44:49+01:00
-draft = true
+draft = false
+tags = ["vmt", "hook", "virtual method table", "c++", "object oriented programming", "inheritance", "devirtualisation"]
 +++
 
 
 ## Preliminary
 
-Virtual method tables (aka `VMTs`, `vtables`, `vftables` or dispatch tables) are an array of pointers to virtual methods of a class. They contain all the class's dynamically bound functions (virtual functions), and they are used to implement dynamic dispatch - which is deciding which implementation of a polymorphic operation should be called at run-time. These tables exist at a class level, meaning multiple instances (objects with identity) of the same class share the same `VMT`. In this blog, you will learn about devirtualisation, what dynamic dispatch is, how to exploit/hook `VMTs`, understand virtual destructors and virtual pointers, learn about the flaws of dynamic dispatch within C++ and how these virtual function tables are used to implement dynamic dispatch.
+Virtual method tables (aka `VMTs`, `vtables`, `vftables` or dispatch tables) are an array of pointers to virtual methods of a class. They contain all the class's dynamically bound functions (virtual functions), and they are used to implement dynamic dispatch - which is deciding which implementation of a [polymorphic operation](https://en.wikipedia.org/wiki/Ad_hoc_polymorphism) should be called at run-time. These tables exist at a class level, meaning multiple instances (objects with identity) of the same class share the same `VMT`. In this blog, you will learn about devirtualisation, what dynamic dispatch is, how to exploit/hook `VMTs`, understand virtual destructors and virtual pointers, learn about the flaws of dynamic dispatch within C++ and how these virtual function tables are used to implement dynamic dispatch.
 
 ## Binding/Dispatching
 
-Binding (aka dispatching) is simply associating a function call with its definition. Static binding is when a function call is associated with its definition during compile time, and dynamic binding during run-time. As we all know, a virtual function can be overridden in a derived class. Therefore, the compiler cannot statically bind a virtual function, because it does not know which implementation should be called. For example, if a derived class, that has overridden a virtual function that was inherited from a base class, is created through an interface of a base class, the implementation of the virtual function that would be called would be the one defined in the base class, which would be erroneous. Hence why virtual functions cannot be statically bound. To further understand, let's look at a code example in which a function would be statically bound:
+Binding (aka dispatching) is simply associating a function call with its definition. Static binding is when a function call is associated with its definition during compile time, and dynamic binding during run-time. As we all know, a virtual function can be overridden in a derived class. Therefore, the compiler cannot statically bind a virtual function, because it does not know which implementation should be called. For example, if a derived class, that has overridden a virtual function that was inherited from a base class, is created through an interface of a base class, the implementation of the virtual function that would be called would be the one defined in the base class, which would be erroneous. Hence virtual functions cannot be statically bound. To further understand, let's look at a code example in which a function would be statically bound:
+
 
 ```cpp
 struct Example
@@ -55,7 +57,7 @@ In the code above, we have a concrete base class with a public virtual method, i
 
 ## Virtual Destructors
 
-To understand virtual destructors practically, we should define a synthesised destructor and a non-parameterised constructor explicitly for each of our concrete classes. Keep in mind the code below is written within the scope of the class that they belong to, but to be succinct I won't include the whole class's definition as it is already above, likewise with the main function. 
+To understand virtual destructors practically, we should define a destructor and a non-parameterised constructor explicitly for each of our concrete classes. Keep in mind the code below is written within the scope of the class that they belong to, but to be succinct I won't include the whole class's definition as it is already above, likewise with the main function. 
 
 ```cpp
  Animal() {

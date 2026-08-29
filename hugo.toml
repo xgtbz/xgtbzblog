@@ -1,15 +1,39 @@
-baseURL = 'https://xgtbz.github.io/xgtbzblog/'
+baseURL = 'https://xgtbz.github.io/xgtbzblog'
 languageCode = 'en-us'
-title = 'xgtbz'
+title = 'cmov'
 theme = 'hugo-blog-awesome'
 publishDir = "docs"
 
+[taxonomies]
+  tag = "tags"
+  category = "categories"
+
+
+[markup]
+[markup.highlight]
+noClasses = false
+lineNos = false
+
 
 [[params.socialIcons]]
-name = "github"
-url = "https://github.com/xgtbz"
+  name = "github"
+  url = "https://github.com/xgtbz/"
+
+[[params.socialIcons]]
+  name = "discord"
+  url = ""
+
+  [menu]
+[[menu.main]]
+pageRef = "/"
+name = 'home'
+url = '/'
+
 
 [params]
   toc = true
-  author.name = "xgtbz"
   tocOpen = true
+  author.name = "sh"
+  author.avatar = "avatar.png"
+  author.description = "x86 Reverse engineer interested in windows internals, processor microarchitecture, virtualisation, emulation, obfuscation, compiler theory and more"
+

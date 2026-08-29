@@ -53,7 +53,7 @@
         },
         "datePublished": "2023-12-19",
         "description": "",
-        "wordCount":  3453 ,
+        "wordCount":  3451 ,
         "mainEntityOfPage": "True",
         "dateModified": "2023-12-19",
         "image": {
@@ -62,19 +62,19 @@
         },
         "publisher": {
         "@type": "Organization",
-        "name": "xgtbz"
+        "name": "cmov"
         }
     }
     </script>
 
 
-<meta name="generator" content="Hugo 0.123.3">
+<meta name="generator" content="Hugo 0.145.0">
 
     
 
     <link rel="canonical" href="http://localhost:1313/xgtbzblog/posts/vmt-hook/">
-    <link href="/xgtbzblog/style.min.760d8a4360aca73b676e056d7baae5840276d5f3933ff971780d00c0a2a2bcb3.css" rel="stylesheet">
-    <link href="/xgtbzblog/code-highlight.min.706d31975fec544a864cb7f0d847a73ea55ca1df91bf495fd12a177138d807cf.css" rel="stylesheet">
+    <link href="/xgtbzblog/style.min.78f1a06680b59f9580323d3762c15004d79186b9fb4e39ef4f558dc6693c7788.css" rel="stylesheet">
+    <link href="/xgtbzblog/code-highlight.min.71849c57cd192e81fa276c8fd22123b43476c4b32f64e8ff2f7626a0e1c6e470.css" rel="stylesheet">
 
     
     <link rel="apple-touch-icon" sizes="180x180" href="/xgtbzblog/icons/apple-touch-icon.png">
@@ -121,6 +121,13 @@ stroke-linejoin="round" class="feather feather-home">
         <div class="trigger">
             <ul class="trigger-container">
                 
+                
+                <li>
+                    <a class="menu-link " href="/xgtbzblog/">
+                        home
+                    </a>
+                    
+                </li>
                 
                 <li class="menu-separator">
                     <span>|</span>
@@ -173,59 +180,59 @@ stroke-linejoin="round" class="feather feather-home">
     </details>
             <div class="page-content">
                 <h2 id="preliminary">Preliminary</h2>
-<p>Virtual method tables (aka <code>VMTs</code>, <code>vtables</code>, <code>vftables</code> or dispatch tables) are an array of pointers to virtual methods of a class. They contain all the class&rsquo;s dynamically bound functions (virtual functions), and they are used to implement dynamic dispatch - which is deciding which implementation of a polymorphic operation should be called at run-time. These tables exist at a class level, meaning multiple instances (objects with identity) of the same class share the same <code>VMT</code>. In this blog, you will learn about devirtualisation, what dynamic dispatch is, how to exploit/hook <code>VMTs</code>, understand virtual destructors and virtual pointers, learn about the flaws of dynamic dispatch within C++ and how these virtual function tables are used to implement dynamic dispatch.</p>
+<p>Virtual method tables (aka <code>VMTs</code>, <code>vtables</code>, <code>vftables</code> or dispatch tables) are an array of pointers to virtual methods of a class. They contain all the class&rsquo;s dynamically bound functions (virtual functions), and they are used to implement dynamic dispatch - which is deciding which implementation of a <a href="https://en.wikipedia.org/wiki/Ad_hoc_polymorphism">polymorphic operation</a> should be called at run-time. These tables exist at a class level, meaning multiple instances (objects with identity) of the same class share the same <code>VMT</code>. In this blog, you will learn about devirtualisation, what dynamic dispatch is, how to exploit/hook <code>VMTs</code>, understand virtual destructors and virtual pointers, learn about the flaws of dynamic dispatch within C++ and how these virtual function tables are used to implement dynamic dispatch.</p>
 <h2 id="bindingdispatching">Binding/Dispatching</h2>
-<p>Binding (aka dispatching) is simply associating a function call with its definition. Static binding is when a function call is associated with its definition during compile time, and dynamic binding during run-time. As we all know, a virtual function can be overridden in a derived class. Therefore, the compiler cannot statically bind a virtual function, because it does not know which implementation should be called. For example, if a derived class, that has overridden a virtual function that was inherited from a base class, is created through an interface of a base class, the implementation of the virtual function that would be called would be the one defined in the base class, which would be erroneous. Hence why virtual functions cannot be statically bound. To further understand, let&rsquo;s look at a code example in which a function would be statically bound:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">Example</span>
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>   <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">IsEven</span>(<span style="color:#66d9ef">int</span> Number) <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">noexcept</span>(true)
-</span></span><span style="display:flex;"><span>   {
-</span></span><span style="display:flex;"><span>     std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> ( ( Number <span style="color:#f92672">%</span> <span style="color:#ae81ff">2</span> ) <span style="color:#f92672">?</span> <span style="color:#e6db74">&#34;Is Odd&#34;</span> <span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Is Even&#34;</span> );
-</span></span><span style="display:flex;"><span>   }
-</span></span><span style="display:flex;"><span>}
+<p>Binding (aka dispatching) is simply associating a function call with its definition. Static binding is when a function call is associated with its definition during compile time, and dynamic binding during run-time. As we all know, a virtual function can be overridden in a derived class. Therefore, the compiler cannot statically bind a virtual function, because it does not know which implementation should be called. For example, if a derived class, that has overridden a virtual function that was inherited from a base class, is created through an interface of a base class, the implementation of the virtual function that would be called would be the one defined in the base class, which would be erroneous. Hence virtual functions cannot be statically bound. To further understand, let&rsquo;s look at a code example in which a function would be statically bound:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="k">struct</span> <span class="nc">Example</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">   <span class="kt">void</span> <span class="nf">IsEven</span><span class="p">(</span><span class="kt">int</span> <span class="n">Number</span><span class="p">)</span> <span class="k">const</span> <span class="k">noexcept</span><span class="p">(</span><span class="nb">true</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">   <span class="p">{</span>
+</span></span><span class="line"><span class="cl">     <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="p">(</span> <span class="p">(</span> <span class="n">Number</span> <span class="o">%</span> <span class="mi">2</span> <span class="p">)</span> <span class="o">?</span> <span class="s">&#34;Is Odd&#34;</span> <span class="o">:</span> <span class="s">&#34;Is Even&#34;</span> <span class="p">);</span>
+</span></span><span class="line"><span class="cl">   <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></div><p>Here, there is only one instance of <code>IsEven</code>, and attempting to override it will lead to undefined behaviour since it&rsquo;s not virtual. So there&rsquo;s no ambiguity about which implementation of the function should be called, because only one implementation exists, so this function can be bound early at compile time (static binding). So in this scenario, the compiler will not generate a virtual method table associated with the structure. Now, let&rsquo;s examine a scenario in which a <code>VMT</code> would be generated by the compiler, and the function would be dynamically bound:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Animal</span>
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
-</span></span><span style="display:flex;"><span>   <span style="color:#66d9ef">virtual</span> <span style="color:#66d9ef">void</span> Speak()
-</span></span><span style="display:flex;"><span>   {
-</span></span><span style="display:flex;"><span>     std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;I am an animal</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>;
-</span></span><span style="display:flex;"><span>   }
-</span></span><span style="display:flex;"><span>};
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Dog</span> <span style="color:#f92672">:</span> <span style="color:#66d9ef">public</span> Animal
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
-</span></span><span style="display:flex;"><span>   <span style="color:#66d9ef">virtual</span> <span style="color:#66d9ef">void</span> Speak() <span style="color:#66d9ef">override</span>
-</span></span><span style="display:flex;"><span>   {
-</span></span><span style="display:flex;"><span>     std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;I am a dog</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>;
-</span></span><span style="display:flex;"><span>   }
-</span></span><span style="display:flex;"><span>};
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>()
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>  Animal<span style="color:#f92672">*</span> my_animal <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Dog();
-</span></span><span style="display:flex;"><span>  my_animal<span style="color:#f92672">-&gt;</span>Speak();
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">delete</span> my_animal;
-</span></span><span style="display:flex;"><span>}
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="k">class</span> <span class="nc">Animal</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="k">public</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">   <span class="k">virtual</span> <span class="kt">void</span> <span class="n">Speak</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">   <span class="p">{</span>
+</span></span><span class="line"><span class="cl">     <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&#34;I am an animal</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">   <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">};</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">class</span> <span class="nc">Dog</span> <span class="o">:</span> <span class="k">public</span> <span class="n">Animal</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="k">public</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">   <span class="k">virtual</span> <span class="kt">void</span> <span class="n">Speak</span><span class="p">()</span> <span class="k">override</span>
+</span></span><span class="line"><span class="cl">   <span class="p">{</span>
+</span></span><span class="line"><span class="cl">     <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&#34;I am a dog</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">   <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">};</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="kt">int</span> <span class="nf">main</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">Animal</span><span class="o">*</span> <span class="n">my_animal</span> <span class="o">=</span> <span class="k">new</span> <span class="n">Dog</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">  <span class="n">my_animal</span><span class="o">-&gt;</span><span class="n">Speak</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">  <span class="k">delete</span> <span class="n">my_animal</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></div><p>In the code above, we have a concrete base class with a public virtual method, in which a concrete derived class inherits and overrides. In the main function, the derived class is constructed with dynamic storage duration, but manipulated through an object of the base class. From a compiler perspective, <code>my_animal</code> points to an object of type Animal, so if this was statically bound, the implementation of the virtual method associated with the function call would be the one from the base class, which is incorrect. Thanks to dynamic dispatch/binding, <code>my_animal-&gt;Speak()</code> actually returns to us the output: &ldquo;I am a dog&rdquo;, which is what we should expect. In upcoming chapters, we&rsquo;ll learn how this is implemented beneath the surface, but for now we&rsquo;ll shift our focus to virtual destructors and the drawbacks associated with the code above.</p>
 <h2 id="virtual-destructors">Virtual Destructors</h2>
-<p>To understand virtual destructors practically, we should define a synthesised destructor and a non-parameterised constructor explicitly for each of our concrete classes. Keep in mind the code below is written within the scope of the class that they belong to, but to be succinct I won&rsquo;t include the whole class&rsquo;s definition as it is already above, likewise with the main function.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span> Animal() {
-</span></span><span style="display:flex;"><span>    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;Animal constructor called</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>;
-</span></span><span style="display:flex;"><span>  }
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span> <span style="color:#f92672">~</span>Animal() {
-</span></span><span style="display:flex;"><span>    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;Animal destructor called</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>;
-</span></span><span style="display:flex;"><span> }
-</span></span><span style="display:flex;"><span>    
-</span></span><span style="display:flex;"><span> Dog() {
-</span></span><span style="display:flex;"><span>    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;Dog constructor called</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>;
-</span></span><span style="display:flex;"><span> }
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span> <span style="color:#f92672">~</span>Dog() {
-</span></span><span style="display:flex;"><span>    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;Dog destructor called</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>;
-</span></span><span style="display:flex;"><span> }
+<p>To understand virtual destructors practically, we should define a destructor and a non-parameterised constructor explicitly for each of our concrete classes. Keep in mind the code below is written within the scope of the class that they belong to, but to be succinct I won&rsquo;t include the whole class&rsquo;s definition as it is already above, likewise with the main function.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"> <span class="n">Animal</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&#34;Animal constructor called</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">~</span><span class="n">Animal</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&#34;Animal destructor called</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"> <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    
+</span></span><span class="line"><span class="cl"> <span class="n">Dog</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&#34;Dog constructor called</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"> <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">~</span><span class="n">Dog</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&#34;Dog destructor called</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"> <span class="p">}</span>
 </span></span></code></pre></div><p>Let&rsquo;s see what happens when we execute the code in the main function. We should be expecting each object to be constructed, and then destructed in the reverse order of construction.</p>
 <pre tabindex="0"><code>Output:
 Animal Constructor called
@@ -235,35 +242,35 @@ Animal destructor called
 </code></pre><p>As we see above, the constructors of each class is called, but the destructor of the dynamic type (Dog) of the polymorphic object is not called. This arises from the fact that the destructor is not virtual, so it is statically bound. Similar to what was mentioned earlier, the compiler believes that <code>my_animal</code> points to an object of type <code>Animal</code>, so it calls the destructor for only this, which leads to undefined behaviour, because both objects were constructed and so it is often the case that both objects need the chance deallocate/close any scope-bound resources they have allocated in their lifetime. However, explicitly marking the destructor virtual of a base class instructs the compiler to try and call the child&rsquo;s destructor by adding the destructor to the <code>VMT</code> of the class. So far, we&rsquo;ve mentioned <code>VMTs</code> briefly and you&rsquo;ve been presented with a basic definition in the introduction. We&rsquo;ll now look at their implementation, which will solidify your understanding of virtual destructors.</p>
 <h2 id="virtual-method-tables-and-devirtualisation">Virtual Method Tables and Devirtualisation</h2>
 <p>Mentioned briefly in the introduction, virtual method tables are just a static array of pointers to virtual functions, set-up at compile time. The compiler constructs a <code>vtable</code> for every class with virtual methods, and there is one virtual table that is shared by all instances (objects) of the class. Virtual functions are added to the <code>VMT</code> in the order they were declared, so the first virtual function will be at index 0, the second at index 1, the third at index 2 and so on. Each entry points to the most derived virtual function accessible by that class. Let&rsquo;s update our code to look at an example. First, we should get rid of the constructors/ destructors we&rsquo;ve explicitly defined and remove the virtual keywords from any function. We should also add fields to our base class, as we will be reviewing its layout in memory. Then, we should initialise an object of type <code>Animal</code> and print it&rsquo;s memory location. At the end, the code should look like this:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Animal</span>
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">int</span> Weight { <span style="color:#ae81ff">50</span> };
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">bool</span> InZoo { false };
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">Speak</span>()
-</span></span><span style="display:flex;"><span>    {
-</span></span><span style="display:flex;"><span>        std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;I am an animal</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>;
-</span></span><span style="display:flex;"><span>    }
-</span></span><span style="display:flex;"><span>};
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Dog</span> <span style="color:#f92672">:</span> <span style="color:#66d9ef">public</span> Animal
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">void</span> Speak()
-</span></span><span style="display:flex;"><span>    {
-</span></span><span style="display:flex;"><span>        std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;I am a dog</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>;
-</span></span><span style="display:flex;"><span>    }
-</span></span><span style="display:flex;"><span>};
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>()
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>    Animal my_animal <span style="color:#f92672">=</span> Dog<span style="color:#f92672">::</span>Dog();
-</span></span><span style="display:flex;"><span>    my_animal.Speak();
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>hex <span style="color:#f92672">&lt;&lt;</span> <span style="color:#f92672">&amp;</span>my_animal <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>endl;
-</span></span><span style="display:flex;"><span>    system(<span style="color:#e6db74">&#34;pause&gt;0&#34;</span>);
-</span></span><span style="display:flex;"><span>}
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="k">class</span> <span class="nc">Animal</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="k">public</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">    <span class="kt">int</span> <span class="n">Weight</span> <span class="p">{</span> <span class="mi">50</span> <span class="p">};</span>
+</span></span><span class="line"><span class="cl">    <span class="kt">bool</span> <span class="n">InZoo</span> <span class="p">{</span> <span class="nb">false</span> <span class="p">};</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="kt">void</span> <span class="nf">Speak</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&#34;I am an animal</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">};</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">class</span> <span class="nc">Dog</span> <span class="o">:</span> <span class="k">public</span> <span class="n">Animal</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="k">public</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">    <span class="kt">void</span> <span class="n">Speak</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&#34;I am a dog</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">};</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="kt">int</span> <span class="nf">main</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">Animal</span> <span class="n">my_animal</span> <span class="o">=</span> <span class="n">Dog</span><span class="o">::</span><span class="n">Dog</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">my_animal</span><span class="p">.</span><span class="n">Speak</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">hex</span> <span class="o">&lt;&lt;</span> <span class="o">&amp;</span><span class="n">my_animal</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">system</span><span class="p">(</span><span class="s">&#34;pause&gt;0&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></div><p>Now our <code>Animal</code> class is no longer polymorphic. It doesn&rsquo;t have any virtual functions, so the compiler does not generate a <code>vtable</code> for it at compile time. In memory, our structure looks like this ( Using the layout: offset, size, address, value ):</p>
 <blockquote>
 <pre tabindex="0"><code>Unnamed Structure:
@@ -290,37 +297,37 @@ Animal destructor called
     → 0000 - Pointer 7ff7bb9bbcb0 : P-&gt;0x7ff659F114d
 </code></pre></blockquote>
 <p>So to clarify, the address <code>0x64d291f6a8</code> is the address of the virtual pointer, the first field of our class added by the compiler. The virtual pointer points to the address <code>0x7ff7bb9bbcb0</code>, which is our virtual function table/array. We can see that the first element of this array is <code>0x7ff659f114d</code>, which should represent our virtual <code>Speak()</code> method. Let&rsquo;s disassemble it to make sure:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-asm" data-lang="asm"><span style="display:flex;"><span><span style="color:#a6e22e">E9</span> <span style="color:#ae81ff">98100000</span> <span style="color:#66d9ef">jmp</span> <span style="color:#66d9ef">Animal</span>::<span style="color:#66d9ef">Speak</span>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-asm" data-lang="asm"><span class="line"><span class="cl"><span class="nf">E9</span> <span class="mi">98100000</span> <span class="no">jmp</span> <span class="no">Animal</span><span class="p">::</span><span class="no">Speak</span>
 </span></span></code></pre></div><p>It is in <code>RX</code> memory and we can see it points to a small <code>stub</code> that jumps to our virtual function, whose disassembly looks like this:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-nasm" data-lang="nasm"><span style="display:flex;"><span><span style="color:#a6e22e">mov</span> <span style="color:#66d9ef">qword</span> ptr ss:[rsp <span style="color:#f92672">+</span> <span style="color:#ae81ff">8</span>], rcx
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">push</span> rbp
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">push</span> rdi
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">rub</span> rsp, E8
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">lea</span> rbp, <span style="color:#66d9ef">qword</span> ptr ss:[rsp <span style="color:#f92672">+</span> <span style="color:#ae81ff">20</span>]
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">lea</span> rcx, <span style="color:#66d9ef">qword</span> ptr ds:[<span style="color:#f92672">&lt;</span>__0628ED20__appname@cpp<span style="color:#f92672">&gt;</span>]
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">call</span> <span style="color:#ae81ff">0x7ff6a560142e</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">lea</span> rdx, <span style="color:#66d9ef">qword</span> ptr ds:[<span style="color:#f92672">&lt;</span><span style="color:#e6db74">&#34;I am an animal\n&#34;</span>...<span style="color:#f92672">&gt;</span>]
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">mov</span> rcx, <span style="color:#66d9ef">qword</span> ptr ds:[<span style="color:#f92672">&lt;</span>class std::basic_ostream<span style="color:#f92672">&gt;</span>]
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">call</span> <span style="color:#ae81ff">0x7ff6a560108c</span>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-nasm" data-lang="nasm"><span class="line"><span class="cl"><span class="nf">mov</span> <span class="kt">qword</span> <span class="nv">ptr</span> <span class="nb">ss</span><span class="p">:[</span><span class="nb">rsp</span> <span class="o">+</span> <span class="mi">8</span><span class="p">],</span> <span class="nb">rcx</span>
+</span></span><span class="line"><span class="cl"><span class="nf">push</span> <span class="nb">rbp</span>
+</span></span><span class="line"><span class="cl"><span class="nf">push</span> <span class="nb">rdi</span>
+</span></span><span class="line"><span class="cl"><span class="nf">rub</span> <span class="nb">rsp</span><span class="p">,</span> <span class="nv">E8</span>
+</span></span><span class="line"><span class="cl"><span class="nf">lea</span> <span class="nb">rbp</span><span class="p">,</span> <span class="kt">qword</span> <span class="nv">ptr</span> <span class="nb">ss</span><span class="p">:[</span><span class="nb">rsp</span> <span class="o">+</span> <span class="mi">20</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl"><span class="nf">lea</span> <span class="nb">rcx</span><span class="p">,</span> <span class="kt">qword</span> <span class="nv">ptr</span> <span class="nb">ds</span><span class="p">:[</span><span class="o">&lt;</span><span class="nv">__0628ED20__appname@cpp</span><span class="o">&gt;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl"><span class="nf">call</span> <span class="mh">0x7ff6a560142e</span>
+</span></span><span class="line"><span class="cl"><span class="nf">lea</span> <span class="nb">rdx</span><span class="p">,</span> <span class="kt">qword</span> <span class="nv">ptr</span> <span class="nb">ds</span><span class="p">:[</span><span class="o">&lt;</span><span class="s">&#34;I am an animal\n&#34;</span><span class="nv">...</span><span class="o">&gt;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl"><span class="nf">mov</span> <span class="nb">rcx</span><span class="p">,</span> <span class="kt">qword</span> <span class="nv">ptr</span> <span class="nb">ds</span><span class="p">:[</span><span class="o">&lt;</span><span class="nb">cl</span><span class="nv">ass</span> <span class="nv">std</span><span class="p">::</span><span class="nv">basic_ostream</span><span class="o">&gt;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl"><span class="nf">call</span> <span class="mh">0x7ff6a560108c</span>
 </span></span></code></pre></div><p>We can see the disassembly corresponds to the the <code>Speak()</code> virtual function, so we are in the right direction. However, our virtual function takes no arguments, so what is <code>RCX</code> pointing to? Well, if you understand calling conventions you&rsquo;d know that all <code>non-static</code> member class functions adhere to the <code>__thiscall</code> calling convention on <code>x86</code>, in which the <code>this</code> pointer is implicitly passed as an argument on the stack to each one of these functions. In <code>x64</code>, the <code>__thiscall</code> calling convention is ignored, and instead the <code>__fastcall</code> register-based convention is used in which the <code>this</code> pointer is implicitly passed as an argument through the <code>RCX</code> register instead of the stack. So, so far, we understand that when a virtual function is called, the virtual pointer is consulted to give us the virtual method table, which is then indexed to return to us our virtual function. Let&rsquo;s put a hardware breakpoint on our <code>vtable</code> and call the virtual method <code>Speak()</code> to corroborate this.</p>
 <p>Unexpectedly, we see our <code>HWBP</code> on the <code>vtable</code> is never hit even after we call the virtual <code>Speak()</code> function. Even when we use <code>SLAT</code> with a hypervisor to log accesses to the <code>vtable</code>, we get no results. We still get the output: &ldquo;I am an animal&rdquo;, so why is this virtual function being statically bound rather than dynamically through the use of <code>vtables</code>? The reason for this behaviour is known as <code>devirtualisation</code>, the compiler can call the correct virtual function without reading the vtable. Let&rsquo;s go back to our main function and inspect the code:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>()
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>    Animal my_animal <span style="color:#f92672">=</span> Dog<span style="color:#f92672">::</span>Dog();
-</span></span><span style="display:flex;"><span>    my_animal.Speak();
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>hex <span style="color:#f92672">&lt;&lt;</span> <span style="color:#f92672">&amp;</span>my_animal <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>endl;
-</span></span><span style="display:flex;"><span>    system(<span style="color:#e6db74">&#34;pause&gt;0&#34;</span>);
-</span></span><span style="display:flex;"><span>}
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="kt">int</span> <span class="nf">main</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">Animal</span> <span class="n">my_animal</span> <span class="o">=</span> <span class="n">Dog</span><span class="o">::</span><span class="n">Dog</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">my_animal</span><span class="p">.</span><span class="n">Speak</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">hex</span> <span class="o">&lt;&lt;</span> <span class="o">&amp;</span><span class="n">my_animal</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">system</span><span class="p">(</span><span class="s">&#34;pause&gt;0&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></div><p>We see that <code>my_animal</code> has <code>automatic storage duration</code>, it is not a pointer. Therefore, the static type of <code>my_animal</code> (which is the data type of the object at compile-time) is the same as the <code>run-time</code> type. For this reason, devirtualisation occurs; <code>my_animal</code> is not a pointer so it&rsquo;s <code>run-time</code> type is known at compile time, so vtables don&rsquo;t need to be consulted to find the correct implementation of <code>Speak()</code> because it is already known by the compiler. If <code>my_animal</code> had dynamic storage duration and so a type of <code>Animal*</code> rather than <code>Animal</code>, then the function could not be statically bound because the type of the object pointed to by a pointer is a <code>run-time</code> property, so the <code>VMT</code> <code>breakpoint</code> would be hit. Devirtualisation is an optimisation, because virtual method calls are a lot slower than direct calls - we&rsquo;ll look at why this is the case later. So from this we can infer, that <code>run-time</code> polymorphism (searching the vtable to find the correct virtual function) only happens with pointer types, in which the <code>run-time type</code> of the object being pointed to differs from it&rsquo;s static type. Let&rsquo;s look at an example in which <code>vtables</code> would really be used:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>()
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>    Animal<span style="color:#f92672">*</span> my_animal <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Dog;
-</span></span><span style="display:flex;"><span>    my_animal<span style="color:#f92672">-&gt;</span>Speak();
-</span></span><span style="display:flex;"><span>	
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">delete</span> my_animal;
-</span></span><span style="display:flex;"><span>    system(<span style="color:#e6db74">&#34;pause&gt;0&#34;</span>);
-</span></span><span style="display:flex;"><span>}
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="kt">int</span> <span class="nf">main</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">Animal</span><span class="o">*</span> <span class="n">my_animal</span> <span class="o">=</span> <span class="k">new</span> <span class="n">Dog</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">my_animal</span><span class="o">-&gt;</span><span class="n">Speak</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">	
+</span></span><span class="line"><span class="cl">    <span class="k">delete</span> <span class="n">my_animal</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">system</span><span class="p">(</span><span class="s">&#34;pause&gt;0&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></div><p>Here, <code>my_animal</code> has dynamic storage duration, it is allocated on the <code>free store</code>. It is not temporary, and therefore it does not destruct unless we delete it.  Devirtualisation cannot happen - the type of the object pointed to by a pointer is only known at <code>run-time</code>. In this scenario, when we place our <code>HWBP</code> on the <code>vtable</code>, control is transferred to the debugger as expected, showing a virtual call (rather than a direct call) has occurred, and &ldquo;I am a dog&rdquo; is printed rightly. Now let&rsquo;s shift our focus back to virtual destructors. Marking a destructor of a base class virtual appends it to the vtable so it is dynamically bound, ensuring that the derived class is properly destructed. In other languages such as rust, the virtual destructor of a polymorphic object is added to the <code>VMT</code> automatically, but C++ allows us to avoid the overhead associated with calling a trivial destructor for a derived class solely for the sake of coherency.</p>
 <h2 id="flaws-of-dynamic-dispatch">Flaws of Dynamic Dispatch</h2>
 <p>Calls to virtual functions are relatively slow compared to inline or direct calls. First, the class object is dereferenced to give us the location of the virtual pointer. Then, the virtual pointer is dereferenced to give us our virtual method table. Then, we use pointer arithmetic to index into the <code>VMT</code> to get our target virtual function; you can understand why it&rsquo;s so slow. There are 3 layers of indirection. The table I&rsquo;ve constructed below shows the flow of a virtual call:</p>
@@ -328,110 +335,109 @@ Animal destructor called
 <p>Now we should understand the reason for the devirtualisation optimisation - the compiler should avoid virtual calls when a direct call is possible ( when the object is not a pointer or reference, so it&rsquo;s static type is the same at <code>run-time</code> ). Not only is it slow, the virtual pointer added to our class increases the size, so our structure takes up more space in memory. <code>VMTs</code> are also easily exploitable, they can be cloned, patched or even replaced entirely. We&rsquo;ll look at how this is done in the next chapter.</p>
 <h2 id="hooking-the-virtual-method-table">Hooking the virtual method table</h2>
 <p>Hooking a <code>vtable</code> is just replacing the <code>stub/thunk</code> with your target function. We mentioned earlier that the <code>vtable</code> is in <code>RX</code> memory, so we must change it&rsquo;s protection before we patch it and restore the protection. Below is a code example of what we&rsquo;ve just described:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#75715e">// this is the function we will be replacing the virtual function with
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">void</span> <span style="color:#a6e22e">replace_function</span>()
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;hooked!!!</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>;
-</span></span><span style="display:flex;"><span>}
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>()
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>    Animal<span style="color:#f92672">*</span> my_animal <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Dog;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// class -&gt; vpointer -&gt; vtable
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">auto</span> vTable <span style="color:#f92672">=</span> <span style="color:#f92672">*</span><span style="color:#66d9ef">reinterpret_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">void</span><span style="color:#f92672">***&gt;</span>(my_animal);
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// change protection to rwx (just needs to be writable)
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    DWORD oldProtection{};
-</span></span><span style="display:flex;"><span>    VirtualProtect(vTable, <span style="color:#66d9ef">sizeof</span>(<span style="color:#66d9ef">void</span><span style="color:#f92672">*</span>), PAGE_EXECUTE_READWRITE, <span style="color:#f92672">&amp;</span>oldProtection);
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// index into the vtable and patch our function
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#75715e">// 1st virtual function at index 0, second at index 1, third at index 2... etc
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    vTable[<span style="color:#ae81ff">0</span>] <span style="color:#f92672">=</span> replace_function;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// restore the protection
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    VirtualProtect(vTable, <span style="color:#66d9ef">sizeof</span>(<span style="color:#66d9ef">void</span><span style="color:#f92672">*</span>), oldProtection, <span style="color:#f92672">&amp;</span>oldProtection);
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// test by calling virtual function
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    my_animal<span style="color:#f92672">-&gt;</span>Speak();
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    system(<span style="color:#e6db74">&#34;pause&gt;0&#34;</span>);
-</span></span><span style="display:flex;"><span>  
-</span></span><span style="display:flex;"><span>}
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">// this is the function we will be replacing the virtual function with
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="kt">void</span> <span class="nf">replace_function</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&#34;hooked!!!</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="kt">int</span> <span class="nf">main</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">Animal</span><span class="o">*</span> <span class="n">my_animal</span> <span class="o">=</span> <span class="k">new</span> <span class="n">Dog</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="c1">// class -&gt; vpointer -&gt; vtable
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="k">auto</span> <span class="n">vTable</span> <span class="o">=</span> <span class="o">*</span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="kt">void</span><span class="o">***&gt;</span><span class="p">(</span><span class="n">my_animal</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="c1">// change protection to rwx (just needs to be writable)
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">DWORD</span> <span class="n">oldProtection</span><span class="p">{};</span>
+</span></span><span class="line"><span class="cl">    <span class="n">VirtualProtect</span><span class="p">(</span><span class="n">vTable</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">),</span> <span class="n">PAGE_EXECUTE_READWRITE</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">oldProtection</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="c1">// index into the vtable and patch our function
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="c1">// 1st virtual function at index 0, second at index 1, third at index 2... etc
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">vTable</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">replace_function</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="c1">// restore the protection
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">VirtualProtect</span><span class="p">(</span><span class="n">vTable</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">),</span> <span class="n">oldProtection</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">oldProtection</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="c1">// test by calling virtual function
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">my_animal</span><span class="o">-&gt;</span><span class="n">Speak</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">system</span><span class="p">(</span><span class="s">&#34;pause&gt;0&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></div><pre tabindex="0"><code>Output:
 &#34;hooked!!!&#34;
 </code></pre><p>Evidently, we have been successful in hooking the <code>vtable</code>. So we know this works well when we are able to change the protection of the <code>vtable</code>, but this isn&rsquo;t always the case. A solution to this is cloning the <code>vtable</code> and installing our hook in this new table. Then, we set our <code>vpointer</code> to point to the new table. This way, we don&rsquo;t have to worry about changing the protection of our <code>VMT</code>:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>    <span style="color:#75715e">// class -&gt; vpointer -&gt; vtable
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">void</span><span style="color:#f92672">**</span> vTable <span style="color:#f92672">=</span> <span style="color:#f92672">*</span><span style="color:#66d9ef">reinterpret_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">void</span><span style="color:#f92672">***&gt;</span>(my_animal);
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">void</span><span style="color:#f92672">*&amp;</span> vPointer <span style="color:#f92672">=</span> <span style="color:#f92672">*</span><span style="color:#66d9ef">reinterpret_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">void</span><span style="color:#f92672">**&gt;</span>(my_animal);
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// get the size of the vtable
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    size_t vTable_size{};
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">do</span> (vTable_size <span style="color:#f92672">+=</span> <span style="color:#ae81ff">1</span>);
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">while</span> (vTable[vTable_size] <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nullptr</span>);
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// allocate space for our new vtable
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">auto</span> new_vTable <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#66d9ef">void</span><span style="color:#f92672">*</span> [vTable_size];
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// clone the contents
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    memcpy(new_vTable, vTable, <span style="color:#66d9ef">sizeof</span>(<span style="color:#66d9ef">void</span><span style="color:#f92672">*</span>) <span style="color:#f92672">*</span> vTable_size);
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// hook our new vtable
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    new_vTable[<span style="color:#ae81ff">0</span>] <span style="color:#f92672">=</span> replace_function;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// update vpointer
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    vPointer <span style="color:#f92672">=</span> new_vTable;
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">    <span class="c1">// class -&gt; vpointer -&gt; vtable
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="kt">void</span><span class="o">**</span> <span class="n">vTable</span> <span class="o">=</span> <span class="o">*</span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="kt">void</span><span class="o">***&gt;</span><span class="p">(</span><span class="n">my_animal</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="kt">void</span><span class="o">*&amp;</span> <span class="n">vPointer</span> <span class="o">=</span> <span class="o">*</span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="kt">void</span><span class="o">**&gt;</span><span class="p">(</span><span class="n">my_animal</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="c1">// get the size of the vtable
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">size_t</span> <span class="n">vTable_size</span><span class="p">{};</span>
+</span></span><span class="line"><span class="cl">    <span class="k">do</span> <span class="p">(</span><span class="n">vTable_size</span> <span class="o">+=</span> <span class="mi">1</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="k">while</span> <span class="p">(</span><span class="n">vTable</span><span class="p">[</span><span class="n">vTable_size</span><span class="p">]</span> <span class="o">!=</span> <span class="k">nullptr</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="c1">// allocate space for our new vtable
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="k">auto</span> <span class="n">new_vTable</span> <span class="o">=</span> <span class="k">new</span> <span class="kt">void</span><span class="o">*</span> <span class="p">[</span><span class="n">vTable_size</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="c1">// clone the contents
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">memcpy</span><span class="p">(</span><span class="n">new_vTable</span><span class="p">,</span> <span class="n">vTable</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="o">*</span> <span class="n">vTable_size</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="c1">// hook our new vtable
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">new_vTable</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">replace_function</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="c1">// update vpointer
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">vPointer</span> <span class="o">=</span> <span class="n">new_vTable</span><span class="p">;</span>
 </span></span></code></pre></div><p>This method is great when we can&rsquo;t change the protection, but if we want our hook to remain, we must work on ensuring it&rsquo;s not detected by an anti-cheat. We will look at how to do this in the next chapter.</p>
 <h2 id="leveraging-devirtualisation-to-avoid-hook-recursion">Leveraging devirtualisation to avoid hook recursion</h2>
 <p>Replacing entries in these tables are extremely easy, but this type of exploitation is even easier to detect, simply because the behaviour returned to the program differs from what is expected. For example, when <code>Speak()</code> is called, we expect &ldquo;I am a dog\n&rdquo; to be printed, not &ldquo;hooked!!!&rdquo;. So our job is to emulate the function and produce something with similar or identical semantics, almost 1:1 with the original function so an anti-cheat isn&rsquo;t suspicious that the function has been replaced. However, since it is not always the case that we have the definition/implementation for the function we are sometimes incapable of emulating it. It would be much more reasonable to just call the original function normally in our <code>replace_function</code> and redirect execution to where it should be, so nothing malicious is surmised by an anti-cheat. This is possible to do because the <code>this</code> pointer is passed implicitly as an argument to all member functions through the <code>RCX</code> register. This solution seems optimal at first, but calling the original function would result in a virtual call, in which whatever is stored in the <code>VMT</code> (which we have patched) would be called, so we would just jump back to our hook, and we&rsquo;re then left with an infinite recursion issue that&rsquo;d lead to a stack overflow.</p>
 <blockquote>
-<p><strong>Image may be more clear with light mode</strong></p>
-</blockquote>
+<p><strong>Image may be more clear with light mode</strong></p></blockquote>
 <p><img src="https://i.ibb.co/P594fhy/save-hook-recursiob-Photoroom-png-Photoroom.png" alt="Image"></p>
 <p>So, to circumvent this issue, we get the <code>run-time</code> type of the object pointed to by the <code>this</code> pointer using reflection ( <code>typeid</code> operator ), and then we construct an object of the same type with automatic storage duration. We then call the function we&rsquo;ve replaced using the object we just created, forcing the compiler to use devirtualisation rather than a virtual call, because the type of the object will always be the same, regardless of whether it&rsquo;s <code>run-time</code> or not. This way, the <code>vtable</code> isn&rsquo;t consulted to look for the virtual function, so the function that will be called will not be our <code>replace_function</code>, but rather the actual virtual function (since it&rsquo;s a direct call). We have to update all the fields of the object we just created to match the object on which the virtual function was called, because the virtual function may operate on this data. We could do this by checking if it&rsquo;s copy constructible, but if it isn&rsquo;t we should just copy it out manually. We don&rsquo;t want the object to be moved, because want the <code>this</code> pointer to point to valid data (if it was moved it&rsquo;d be a dangling pointer). Let&rsquo;s update our <code>replace_function</code> to do this</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#75715e">// &#39;this&#39; passed through RCX (first argument)
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">void</span> <span style="color:#a6e22e">replace_function</span>(Animal<span style="color:#f92672">*</span> thisptr)
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;hooked!!!</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// if the run-time type of object pointed to by the pointer is an Animal then...
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">if</span> (std<span style="color:#f92672">::</span>string(<span style="color:#66d9ef">typeid</span>(<span style="color:#f92672">*</span>thisptr).name()).find(<span style="color:#e6db74">&#34;Animal&#34;</span>) 
-</span></span><span style="display:flex;"><span>            <span style="color:#f92672">!=</span> std<span style="color:#f92672">::</span>string<span style="color:#f92672">::</span>npos)
-</span></span><span style="display:flex;"><span>    {
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// we create an object that is NOT a pointer, so no virtual calls...
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>        Animal replace_rtt{};
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// update the state to match
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>        replace_rtt.Weight <span style="color:#f92672">=</span> thisptr<span style="color:#f92672">-&gt;</span>Weight;
-</span></span><span style="display:flex;"><span>        replace_rtt.InZoo <span style="color:#f92672">=</span> thisptr<span style="color:#f92672">-&gt;</span>InZoo;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// call the function, force devirtualisation, no infinite recursion... no stack overflow
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>        replace_rtt.Speak();
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    }
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">else</span> {
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// in this case, the &#39;this&#39; pointer points to an object of type Dog during run-time
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// same process, but we have to use the correct type so the right implementation of Speak is called
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>        Dog replace_rtt{};
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>        replace_rtt.Weight <span style="color:#f92672">=</span> thisptr<span style="color:#f92672">-&gt;</span>Weight;
-</span></span><span style="display:flex;"><span>        replace_rtt.InZoo <span style="color:#f92672">=</span> thisptr<span style="color:#f92672">-&gt;</span>InZoo;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// call the function, force devirtualisation, no infinite recursion... no stack overflow
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>        replace_rtt.Speak();
-</span></span><span style="display:flex;"><span>    }
-</span></span><span style="display:flex;"><span>}
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">// &#39;this&#39; passed through RCX (first argument)
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="kt">void</span> <span class="nf">replace_function</span><span class="p">(</span><span class="n">Animal</span><span class="o">*</span> <span class="n">thisptr</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&#34;hooked!!!</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="c1">// if the run-time type of object pointed to by the pointer is an Animal then...
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="k">if</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="k">typeid</span><span class="p">(</span><span class="o">*</span><span class="n">thisptr</span><span class="p">).</span><span class="n">name</span><span class="p">()).</span><span class="n">find</span><span class="p">(</span><span class="s">&#34;Animal&#34;</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">            <span class="o">!=</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">npos</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="c1">// we create an object that is NOT a pointer, so no virtual calls...
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="n">Animal</span> <span class="n">replace_rtt</span><span class="p">{};</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="c1">// update the state to match
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="n">replace_rtt</span><span class="p">.</span><span class="n">Weight</span> <span class="o">=</span> <span class="n">thisptr</span><span class="o">-&gt;</span><span class="n">Weight</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">replace_rtt</span><span class="p">.</span><span class="n">InZoo</span> <span class="o">=</span> <span class="n">thisptr</span><span class="o">-&gt;</span><span class="n">InZoo</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="c1">// call the function, force devirtualisation, no infinite recursion... no stack overflow
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="n">replace_rtt</span><span class="p">.</span><span class="n">Speak</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="k">else</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="c1">// in this case, the &#39;this&#39; pointer points to an object of type Dog during run-time
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>
+</span></span><span class="line"><span class="cl">        <span class="c1">// same process, but we have to use the correct type so the right implementation of Speak is called
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="n">Dog</span> <span class="n">replace_rtt</span><span class="p">{};</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">replace_rtt</span><span class="p">.</span><span class="n">Weight</span> <span class="o">=</span> <span class="n">thisptr</span><span class="o">-&gt;</span><span class="n">Weight</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">replace_rtt</span><span class="p">.</span><span class="n">InZoo</span> <span class="o">=</span> <span class="n">thisptr</span><span class="o">-&gt;</span><span class="n">InZoo</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="c1">// call the function, force devirtualisation, no infinite recursion... no stack overflow
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="n">replace_rtt</span><span class="p">.</span><span class="n">Speak</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></div><pre tabindex="0"><code>Output:
 hooked!!!
 I am a dog
 </code></pre><p>It&rsquo;s important to get the type of the object pointed to by the pointer at <code>run-time</code>, and not the type of the pointer - which will never change. <code>Animal*</code> can point to a <code>Dog</code> or <code>Animal</code>. The code below is erroneous for these reasons:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#75715e">// logical error : decltype evaluates type at compile time
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>std<span style="color:#f92672">::</span>remove_reference<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">decltype</span>(<span style="color:#f92672">*</span>thisptr)<span style="color:#f92672">&gt;::</span>type rtt{};
-</span></span><span style="display:flex;"><span>rtt.Speak();
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e">// logical error: typeid(thisptr).name() will always return Animal*, we need the type of the object pointed to by this pointer
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">if</span> (std<span style="color:#f92672">::</span>string(<span style="color:#66d9ef">typeid</span>(thisptr).name()).find(<span style="color:#e6db74">&#34;Animal&#34;</span>) <span style="color:#f92672">!=</span> std<span style="color:#f92672">::</span>string<span style="color:#f92672">::</span>npos)
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">// logical error : decltype evaluates type at compile time
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="n">std</span><span class="o">::</span><span class="n">remove_reference</span><span class="o">&lt;</span><span class="k">decltype</span><span class="p">(</span><span class="o">*</span><span class="n">thisptr</span><span class="p">)</span><span class="o">&gt;::</span><span class="n">type</span> <span class="n">rtt</span><span class="p">{};</span>
+</span></span><span class="line"><span class="cl"><span class="n">rtt</span><span class="p">.</span><span class="n">Speak</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">// logical error: typeid(thisptr).name() will always return Animal*, we need the type of the object pointed to by this pointer
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">if</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="k">typeid</span><span class="p">(</span><span class="n">thisptr</span><span class="p">).</span><span class="n">name</span><span class="p">()).</span><span class="n">find</span><span class="p">(</span><span class="s">&#34;Animal&#34;</span><span class="p">)</span> <span class="o">!=</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">::</span><span class="n">npos</span><span class="p">)</span>
 </span></span></code></pre></div><h2 id="conclusion">Conclusion</h2>
 <p>Now you should understand how dynamic dispatch is implemented in C++, and how you can hook/clone <code>VMTs</code> without changing the protection. You should also know how to redirect execution flow back to the original function you&rsquo;ve hooked without ending up with a stack overflow by utilising the devirtualisation optimisation. When this isn&rsquo;t possible, you could of-course save the original function pointer before you hook the <code>VMT</code>.</p>
 
@@ -443,7 +449,7 @@ I am a dog
     &nbsp;
 
     <div class="footer_social-icons">
-<a href="https://github.com/xgtbz" target="_blank" rel="noopener noreferrer me"
+<a href="https://github.com/xgtbz/" target="_blank" rel="noopener noreferrer me"
     title="Github">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
     stroke-linecap="round" stroke-linejoin="round">
@@ -452,9 +458,18 @@ I am a dog
     </path>
 </svg>
 </a>
+<a href="" target="_blank" rel="noopener noreferrer me"
+    title="Discord">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="20 15 205 190" fill="currentColor" stroke="none">
+    <path
+        d="M104.4 103.9c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1.1-6.1-4.5-11.1-10.2-11.1zM140.9 103.9c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1s-4.5-11.1-10.2-11.1z" />
+    <path
+        d="M189.5 20h-134C44.2 20 35 29.2 35 40.6v135.2c0 11.4 9.2 20.6 20.5 20.6h113.4l-5.3-18.5 12.8 11.9 12.1 11.2 21.5 19V40.6c0-11.4-9.2-20.6-20.5-20.6zm-38.6 130.6s-3.6-4.3-6.6-8.1c13.1-3.7 18.1-11.9 18.1-11.9-4.1 2.7-8 4.6-11.5 5.9-5 2.1-9.8 3.5-14.5 4.3-9.6 1.8-18.4 1.3-25.9-.1-5.7-1.1-10.6-2.7-14.7-4.3-2.3-.9-4.8-2-7.3-3.4-.3-.2-.6-.3-.9-.5-.2-.1-.3-.2-.4-.3-1.8-1-2.8-1.7-2.8-1.7s4.8 8 17.5 11.8c-3 3.8-6.7 8.3-6.7 8.3-22.1-.7-30.5-15.2-30.5-15.2 0-32.2 14.4-58.3 14.4-58.3 14.4-10.8 28.1-10.5 28.1-10.5l1 1.2c-18 5.2-26.3 13.1-26.3 13.1s2.2-1.2 5.9-2.9c10.7-4.7 19.2-6 22.7-6.3.6-.1 1.1-.2 1.7-.2 6.1-.8 13-1 20.2-.2 9.5 1.1 19.7 3.9 30.1 9.6 0 0-7.9-7.5-24.9-12.7l1.4-1.6s13.7-.3 28.1 10.5c0 0 14.4 26.1 14.4 58.3 0 0-8.5 14.5-30.6 15.2z" />
+</svg>
+</a>
 </div>
     <small class="footer_copyright">
-        © 2024 xgtbz.
+        © 2026 sh.
         
     </small>
 </footer>

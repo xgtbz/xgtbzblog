@@ -53,7 +53,7 @@
         },
         "datePublished": "2023-11-01",
         "description": "",
-        "wordCount":  5502 ,
+        "wordCount":  4963 ,
         "mainEntityOfPage": "True",
         "dateModified": "2023-11-01",
         "image": {
@@ -62,19 +62,19 @@
         },
         "publisher": {
         "@type": "Organization",
-        "name": "xgtbz"
+        "name": "cmov"
         }
     }
     </script>
 
 
-<meta name="generator" content="Hugo 0.123.3">
+<meta name="generator" content="Hugo 0.145.0">
 
     
 
     <link rel="canonical" href="http://localhost:1313/xgtbzblog/posts/vulnerable-driver-reversal/">
-    <link href="/xgtbzblog/style.min.760d8a4360aca73b676e056d7baae5840276d5f3933ff971780d00c0a2a2bcb3.css" rel="stylesheet">
-    <link href="/xgtbzblog/code-highlight.min.706d31975fec544a864cb7f0d847a73ea55ca1df91bf495fd12a177138d807cf.css" rel="stylesheet">
+    <link href="/xgtbzblog/style.min.78f1a06680b59f9580323d3762c15004d79186b9fb4e39ef4f558dc6693c7788.css" rel="stylesheet">
+    <link href="/xgtbzblog/code-highlight.min.71849c57cd192e81fa276c8fd22123b43476c4b32f64e8ff2f7626a0e1c6e470.css" rel="stylesheet">
 
     
     <link rel="apple-touch-icon" sizes="180x180" href="/xgtbzblog/icons/apple-touch-icon.png">
@@ -121,6 +121,13 @@ stroke-linejoin="round" class="feather feather-home">
         <div class="trigger">
             <ul class="trigger-container">
                 
+                
+                <li>
+                    <a class="menu-link " href="/xgtbzblog/">
+                        home
+                    </a>
+                    
+                </li>
                 
                 <li class="menu-separator">
                     <span>|</span>
@@ -179,51 +186,51 @@ stroke-linejoin="round" class="feather feather-home">
     </details>
             <div class="page-content">
                 <h2 id="preliminary">Preliminary</h2>
-<p>Any driver that communicates with a user-mode application is potentially vulnerable. The privileges exposed by a driver through communication are not exclusively limited to a specific user-mode application (unless the driver takes an extra step to validate a specific process, which is rare), therefore they can be reverse engineered, exploited and leveraged by any program running in <code>ring3</code>. In the past, malware developers have exploited vulnerable drivers to manipulate <code>MSRs</code>, allocate <code>RWX</code> memory in the kernel virtual address space to execute shellcode, patch system calls, or even manually map an unsigned driver - this blog post demonstrates nothing new. However, Microsoft is often quick to revoke the signatures of drivers that they consider vulnerable, which may make it problematic to find a working vulnerable driver with a viable signature on the latest versions of windows.</p>
+<p>Any driver that communicates with a user-mode application is potentially vulnerable. The privileges exposed by a driver through communication are not exclusively limited to a specific user-mode application (unless the driver takes an extra step to validate a specific process, which is rare), therefore they can be reverse engineered, exploited and leveraged by any program running in <code>ring 3</code>. In the past, malware developers have exploited vulnerable drivers to manipulate <code>MSRs</code>, allocate <code>RWX</code> memory in the kernel virtual address space to execute shellcode, patch system calls, or even manually map an unsigned driver - this blog post demonstrates nothing new. However, Microsoft is often quick to revoke the signatures of drivers that they consider vulnerable, which may make it problematic to find a working vulnerable driver with a viable signature on the latest versions of windows.</p>
 <p>In this blog post, we reverse engineer a working vulnerable driver (Windows 11 23H2) and communicate with it through <code>IOCTL</code> to exploit some of the many privileges it exposes: read/write control registers, manipulate <code>MSRS</code>, allocate/free contiguous physical memory, stall the processor, map physical memory, translate to physical address and more. This blog post makes it easy for a beginner reverse engineer to understand the internals of <code>IOCTL</code> operations &amp; how to reverse communication structures effectively.</p>
-<p>The driver we will be reversing in this post is <code>AsrOmgDrv.sys</code>, which was developed by <code>ASRock</code> incorporation. This is a Taiwanese company that manufacture motherboards - so it&rsquo;s no wonder they produce vulnerable drivers.</p>
+<p>The driver we will be reversing in this post is <a href="https://github.com/xgtbz/AsrOmgDrv">AsrOmgDrv.sys</a>, which was developed by <a href="https://en.wikipedia.org/wiki/ASRock">ASRock</a> incorporation. This is a Taiwanese company that manufacture motherboards - so it&rsquo;s no wonder they produce vulnerable drivers.</p>
 <h2 id="opening-a-handle-to-the-driver">Opening a handle to the driver</h2>
-<p>After loading the signed driver comfortably with <code>NtLoadDriver</code>, our first step is to open a handle to it. In short, a handle is an index that represents an entry on table maintained on a process, by process basis, that points logically to a kernel object residing in kernel space. They are, in essence, a way for <code>ring3</code> applications to indirectly reference kernel objects, and to communicate with this vulnerable driver we must open one. We can do this easily with <code>CreateFile</code>, but we need to find out some information about our vulnerable driver to call this function appropriately, such as it&rsquo;s device name. We can obtain everything we need to complete this call very easily with some basic static analysis, but first you should understand what the device name actually is.</p>
+<p>After loading the signed driver, our first step is to open a handle to it. In short, a handle is an index to an entry on table maintained on a process, by process basis, that points logically to a kernel object residing in kernel space. They are, in essence, a way for <code>ring3</code> applications to indirectly reference kernel objects, and to communicate with this vulnerable driver we must open one. We can do this easily with <code>CreateFile</code>, but we need to find out some information about our vulnerable driver to call this function appropriately, such as it&rsquo;s device name. We can obtain everything we need to complete this call very easily with some basic static analysis, but first you should understand what the device name actually is.</p>
 <p>To be able to communicate with a driver through <code>IOCTL</code>, the driver must have setup a device object which allows the OS to interact and communicate with the driver efficiently. According to the documentation, the device object structure represents a logical, virtual, or physical device for which a driver handles <code>I/O</code> requests (communication). This structure contains various fields of useful information that the <code>I/O</code> manager or driver could use when responding to a request made by another component within the system, such as the <code>ReferenceCount</code>, which represents the number of open handles to the device object and is mainly used by the <code>I/O</code> manager, the <code>IRP</code>, which we will look at later, and the <code>DriverObject</code>. Multiple device objects could exist within a system, so they need some unique identifier that can distinguish them from one another. This is where device names come into play, providing a distinctive label for each device object, allowing applications to accurately target and communicate with the desired device/driver. The device name is defined by the driver with a call to <code>IoCreateDevice</code>, so you could quickly gain a pointer to this function from the <code>.idata</code> section and <code>xref</code> to it. We will, however, be starting from the executable entry point.</p>
-<p>So we begin our analysis at the executable entry point, which you can navigate to with <code>CRTL + E</code>. We see this routine set up the stack canary and <code>jmp</code> to the original entry point (<code>OEP</code>), where we will be obtaining all of our information required to call <code>CreateFile</code>.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-asm" data-lang="asm"><span style="display:flex;"><span><span style="color:#a6e22e">public</span> <span style="color:#66d9ef">start</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">start</span> <span style="color:#66d9ef">proc</span> <span style="color:#66d9ef">near</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">sub</span>     <span style="color:#66d9ef">rsp</span>, <span style="color:#ae81ff">28</span><span style="color:#66d9ef">h</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">mov</span>     <span style="color:#66d9ef">r8</span>, <span style="color:#66d9ef">rdx</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">mov</span>     <span style="color:#66d9ef">r9</span>, <span style="color:#66d9ef">rcx</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">call</span>    <span style="color:#66d9ef">__security_init_cookie</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">mov</span>     <span style="color:#66d9ef">rdx</span>, <span style="color:#66d9ef">r8</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">mov</span>     <span style="color:#66d9ef">rcx</span>, <span style="color:#66d9ef">r9</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">add</span>     <span style="color:#66d9ef">rsp</span>, <span style="color:#ae81ff">28</span><span style="color:#66d9ef">h</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">jmp</span>     <span style="color:#66d9ef">DriverEntry</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">start</span> <span style="color:#66d9ef">endp</span>
+<p>So we begin our analysis at the executable entry point, which you can navigate to with <code>CRTL + E</code> in <a href="https://en.wikipedia.org/wiki/Interactive_Disassembler">IDA</a>. We see this routine set up the stack canary and <code>jmp</code> to the original entry point (<code>OEP</code>), where we will be obtaining all of our information required to call <code>CreateFile</code>.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-nasm" data-lang="nasm"><span class="line"><span class="cl"><span class="nf">public</span> <span class="nv">start</span>
+</span></span><span class="line"><span class="cl"><span class="nf">start</span> <span class="nv">proc</span> <span class="nv">near</span>
+</span></span><span class="line"><span class="cl"><span class="nf">sub</span>     <span class="nb">rsp</span><span class="p">,</span> <span class="mh">28h</span>
+</span></span><span class="line"><span class="cl"><span class="nf">mov</span>     <span class="nv">r8</span><span class="p">,</span> <span class="nb">rdx</span>
+</span></span><span class="line"><span class="cl"><span class="nf">mov</span>     <span class="nv">r9</span><span class="p">,</span> <span class="nb">rcx</span>
+</span></span><span class="line"><span class="cl"><span class="nf">call</span>    <span class="nv">__security_init_cookie</span>
+</span></span><span class="line"><span class="cl"><span class="nf">mov</span>     <span class="nb">rdx</span><span class="p">,</span> <span class="nv">r8</span>
+</span></span><span class="line"><span class="cl"><span class="nf">mov</span>     <span class="nb">rcx</span><span class="p">,</span> <span class="nv">r9</span>
+</span></span><span class="line"><span class="cl"><span class="nf">add</span>     <span class="nb">rsp</span><span class="p">,</span> <span class="mh">28h</span>
+</span></span><span class="line"><span class="cl"><span class="nf">jmp</span>     <span class="nv">DriverEntry</span>
+</span></span><span class="line"><span class="cl"><span class="nf">start</span> <span class="nv">endp</span>
 </span></span></code></pre></div><p>The psuedocode generated by IDA shown below shows the initialisation of a unicode string, followed by a subsequent call to <code>IoCreateDevice</code>. The purpose of this <code>DDI</code> is to &ldquo;create a device object for use by a driver&rdquo;, and its 3rd argument is of type <code>UNICODE_STRING</code> - whose purpose is to represent the name of the device object, as we mentioned earlier.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>RtlInitUnicodeString(<span style="color:#f92672">&amp;</span>DestinationString, aDeviceAsromgdr);
-</span></span><span style="display:flex;"><span>RtlInitUnicodeString(<span style="color:#f92672">&amp;</span>v6, aDosdevicesAsro);
-</span></span><span style="display:flex;"><span>result <span style="color:#f92672">=</span> IoCreateDevice(DriverObject, <span style="color:#ae81ff">64</span>i64, <span style="color:#f92672">&amp;</span>DestinationString);
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="n">RtlInitUnicodeString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">DestinationString</span><span class="p">,</span> <span class="n">aDeviceAsromgdr</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="n">RtlInitUnicodeString</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v6</span><span class="p">,</span> <span class="n">aDosdevicesAsro</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="n">result</span> <span class="o">=</span> <span class="n">IoCreateDevice</span><span class="p">(</span><span class="n">DriverObject</span><span class="p">,</span> <span class="mi">64</span><span class="n">i64</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">DestinationString</span><span class="p">);</span>
 </span></span></code></pre></div><p>From this we can reasonably infer that the <code>.data</code> variable, &ldquo;aDeviceAsromgdr&rdquo; holds the name of our device, and its value is shown in disassembly the below.</p>
-<pre tabindex="0"><code class="language-masm" data-lang="masm">lea     rdx, aDeviceAsromgdr ; &#34;\\Device\\AsrOmgDrv&#34;
-lea     rcx, [rsp+68h+DestinationString] ; DestinationString
-call    cs:RtlInitUnicodeString
-</code></pre><p>Just like that, we have retrieved the device name and are now ready to open a handle to the driver with CreateFileA, with help from the documentation of course.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">__int32</span> <span style="color:#a6e22e">open_handle_to_drv</span>(HANDLE<span style="color:#f92672">&amp;</span> DrvHandle) {
-</span></span><span style="display:flex;"><span>   DrvHandle <span style="color:#f92672">=</span> CreateFileA(<span style="color:#e6db74">&#34;</span><span style="color:#ae81ff">\\\\</span><span style="color:#e6db74">.</span><span style="color:#ae81ff">\\</span><span style="color:#e6db74">AsrOmgDrv&#34;</span>, FILE_ANY_ACCESS, 
-</span></span><span style="display:flex;"><span>      <span style="color:#ae81ff">0</span>, <span style="color:#66d9ef">nullptr</span>, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, <span style="color:#66d9ef">nullptr</span>);
-</span></span><span style="display:flex;"><span>            
-</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">return</span> GetLastError();
-</span></span><span style="display:flex;"><span>}
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-asm" data-lang="asm"><span class="line"><span class="cl"><span class="nf">lea</span>     <span class="no">rdx</span><span class="p">,</span> <span class="no">aDeviceAsromgdr</span> <span class="c1">; &#34;\\Device\\AsrOmgDrv&#34;
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nf">lea</span>     <span class="no">rcx</span><span class="p">,</span> <span class="p">[</span><span class="no">rsp</span><span class="err">+</span><span class="mi">68</span><span class="no">h</span><span class="err">+</span><span class="no">DestinationString</span><span class="p">]</span> <span class="c1">; DestinationString
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="nf">call</span>    <span class="no">cs</span><span class="p">:</span><span class="no">RtlInitUnicodeString</span>
+</span></span></code></pre></div><p>Just like that, we have retrieved the device name and are now ready to open a handle to the driver with CreateFileA, with help from the documentation of course.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="kt">unsigned</span> <span class="kr">__int32</span> <span class="nf">open_handle_to_drv</span><span class="p">(</span><span class="n">HANDLE</span><span class="o">&amp;</span> <span class="n">DrvHandle</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">   <span class="n">DrvHandle</span> <span class="o">=</span> <span class="n">CreateFileA</span><span class="p">(</span><span class="s">&#34;</span><span class="se">\\\\</span><span class="s">.</span><span class="se">\\</span><span class="s">AsrOmgDrv&#34;</span><span class="p">,</span> <span class="n">FILE_ANY_ACCESS</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">      <span class="mi">0</span><span class="p">,</span> <span class="k">nullptr</span><span class="p">,</span> <span class="n">OPEN_EXISTING</span><span class="p">,</span> <span class="n">FILE_ATTRIBUTE_NORMAL</span><span class="p">,</span> <span class="k">nullptr</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">            
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="n">GetLastError</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></div><h2 id="ioctl-internals-summary">IOCTL Internals Summary</h2>
 <p>Now that we have successfully opened a handle, we could theoretically begin communicating with our driver. But first, we have to understand the basics of <code>IOCTL</code> operations &amp; reverse all the communication structures that we need to talk to our driver meaningfully.</p>
 <p><code>IOCTLs</code> are commands used to communicate with device drivers and other kernel-mode software. <code>IOCTL</code> operations are managed by the <code>I/O</code> subsystem in Windows, which consists of several layers of software components, including file systems and device drivers that it uses to do its work.</p>
 <p>There are multiple types of <code>IOCTL</code> commands, but within the scope of this blog we will only be focusing on <code>METHOD_BUFFERED</code>, which is conveniently the most common type of command. This type of <code>IOCTL</code> command is used for operations that transfer data between a driver and a user-mode application. The data is passed through a buffer, which can be allocated by the user-mode application or the driver, and can be any size.</p>
 <p>Not all drivers are intended for communication, thus not all drivers inherently support <code>IOCTL</code> operations. You can tell if a driver supports <code>IOCTL</code> if it has created a device object, usually with <code>IoCreateDevice</code>, and has established a symbolic link, usually with <code>IoCreateSymbolicLink</code>, which is an indirect reference to the device. Evidently, our driver does both.</p>
-<pre tabindex="0"><code class="language-masm" data-lang="masm">call    cs:IoCreateDevice
-test    eax, eax
-js      loc_160F2
-lea     rdx, [rsp + 68h + DestinationString]
-lea     rcx, [rsp + 68h + DeviceName]
-call    cs:IoCreateSymbolicLink
-</code></pre><p>Imagine a driver that provides multiple functionalities, like the one we&rsquo;re currently analysing. How does a user-mode application, when communicating with one of these drivers, specify which functionality they want to be executed? This is where control codes are introduced, and they are used by device drivers to handle different <code>IOCTL</code> operations. These control codes are integral values that specify the operation to be handled by the driver. It is important to note that these codes are driver defined, so we will have to continue reversing to find out what codes map to what operations.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-nasm" data-lang="nasm"><span class="line"><span class="cl"><span class="nf">call</span>    <span class="nb">cs</span><span class="p">:</span><span class="nv">IoCreateDevice</span>
+</span></span><span class="line"><span class="cl"><span class="nf">test</span>    <span class="nb">eax</span><span class="p">,</span> <span class="nb">eax</span>
+</span></span><span class="line"><span class="cl"><span class="nf">js</span>      <span class="nv">loc_160F2</span>
+</span></span><span class="line"><span class="cl"><span class="nf">lea</span>     <span class="nb">rdx</span><span class="p">,</span> <span class="p">[</span><span class="nb">rsp</span> <span class="o">+</span> <span class="mh">68h</span> <span class="o">+</span> <span class="nv">DestinationString</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl"><span class="nf">lea</span>     <span class="nb">rcx</span><span class="p">,</span> <span class="p">[</span><span class="nb">rsp</span> <span class="o">+</span> <span class="mh">68h</span> <span class="o">+</span> <span class="nv">DeviceName</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl"><span class="nf">call</span>    <span class="nb">cs</span><span class="p">:</span><span class="nv">IoCreateSymbolicLink</span>
+</span></span></code></pre></div><p>Imagine a driver that provides multiple functionalities, like the one we&rsquo;re currently analysing. How does a user-mode application, when communicating with one of these drivers, specify which functionality they want to be executed? This is where control codes are introduced, and they are used by device drivers to handle different <code>IOCTL</code> operations. These control codes are integral values that specify the operation to be handled by the driver. It is important to note that these codes are driver defined, so we will have to continue reversing to find out what codes map to what operations.</p>
 <p>User-mode applications use the <code>DeviceIoControl</code> <code>WINAPI</code> routine to communicate with device drivers. The routine requires that we specify a handle to the device we want to talk to, an application or driver-defined buffer where data will be written to and read from (remember <code>METHOD_BUFFERED</code>), a control code to specify the operation we want to be performed, and the size of these structures.</p>
 <p>Now, it&rsquo;s time we understand what happens when a call to <code>DeviceIoControl</code> is made from user-mode at a high level. This will familiarise us with essential structures involved in reversing <code>IOCTL</code> communication.</p>
 <ul>
@@ -257,406 +264,373 @@ call    cs:IoCreateSymbolicLink
 </ul>
 <p>Let&rsquo;s discuss the dispatch routines we mentioned earlier when analysing the control flow of <code>DeviceIoControl</code>. Under the opaque <code>DRIVER_OBJECT</code> structure, there is a field displayed as &ldquo;MajorFunction&rdquo;. This field is a pointer to an array of driver defined functions known as dispatch routines. These dispatch routines are created to handle a specific <code>I/O</code> operation. For example, when a user-mode application calls <code>ReadFile</code> and passes in a handle to a device object, the dispatch routine associated with the <code>ReadFile</code> operation will be executed. We should keep in mind, however, that a single dispatch routine may be used to handle multiple <code>I/O</code> operations, which you will see in the section following this one. Below you can see a list of operations that are handled by dispatch routines, we are interested in <code>DeviceControl</code>.</p>
 <table>
-<thead>
-<tr>
-<th>Routine</th>
-<th>Code</th>
-<th>Operation</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>CloseHandle</td>
-<td>IRP_MJ_CLOSE</td>
-<td>Close</td>
-</tr>
-<tr>
-<td>CreateFile</td>
-<td>IRP_MJ_CREATE</td>
-<td>Create</td>
-</tr>
-<tr>
-<td><strong>DeviceIoControl</strong></td>
-<td><strong>IRP_MJ_DEVICE_CONTROL</strong></td>
-<td><strong>DeviceControl</strong></td>
-</tr>
-<tr>
-<td>ReadFile</td>
-<td>IRP_MJ_READ</td>
-<td>Read</td>
-</tr>
-<tr>
-<td>WriteFile</td>
-<td>IRP_MJ_WRITE</td>
-<td>Write</td>
-</tr>
-</tbody>
+  <thead>
+      <tr>
+          <th>Routine</th>
+          <th>Code</th>
+          <th>Operation</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>CloseHandle</td>
+          <td>IRP_MJ_CLOSE</td>
+          <td>Close</td>
+      </tr>
+      <tr>
+          <td>CreateFile</td>
+          <td>IRP_MJ_CREATE</td>
+          <td>Create</td>
+      </tr>
+      <tr>
+          <td><strong>DeviceIoControl</strong></td>
+          <td><strong>IRP_MJ_DEVICE_CONTROL</strong></td>
+          <td><strong>DeviceControl</strong></td>
+      </tr>
+      <tr>
+          <td>ReadFile</td>
+          <td>IRP_MJ_READ</td>
+          <td>Read</td>
+      </tr>
+      <tr>
+          <td>WriteFile</td>
+          <td>IRP_MJ_WRITE</td>
+          <td>Write</td>
+      </tr>
+  </tbody>
 </table>
 <p>So now you should understand step 5 of <code>DeviceIoControl</code> better - the control flow was passed to the dispatch routine responsible for responding to <code>DeviceControl</code> requests. Now you have a fundamental understanding of <code>IOCTL</code>, we can start our journey on cracking the control codes &amp; communication structures.</p>
 <h2 id="locating-the-devicecontrol-dispatch-routine">Locating the DeviceControl dispatch routine</h2>
-<p>Getting a pointer to the <code>DeviceControl</code> dispatch routine is extremely easy. Given that the <code>IRP_MJ_DEVICE_CONTROL</code> constant is of value 0xE (meaning the <code>DeviceControl</code> dispatch routine is index 14 in the MajorFunction array), and that the start of the <code>MajorFunction</code> array is 0x70 bytes from the DriverObject, we can say that: <strong><code>offset_from_driver_object</code> - 0x70 = 0x70</strong> because <strong>0x70 / 8 = 0xE</strong> . Therefore, <strong>0x70 + 0x70 = <code>offset_from_driver_object</code> (0xE0)</strong>. We divide 0x70 by 8 because each entry in the array is a pointer that occupies 8 bytes in memory.</p>
-<p>Still within the <code>OEP</code>, we can easily distinguish the <code>DeviceControl</code> dispatch routine from other dispatch routines now that we know the offset - the function being written to <strong><code>DriverObject</code> + 0xE0</strong>. The psuedocode below also depicts how a single dispatch routine can be used to handle multiple I/O operations, as described earlier.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (NT_SUCCESS(IoCreateSymbolicLink(<span style="color:#f92672">&amp;</span>devincename, <span style="color:#f92672">&amp;</span>DestinationString)))
-</span></span><span style="display:flex;"><span>  {
-</span></span><span style="display:flex;"><span>     <span style="color:#75715e">// same dispatch routine for two of the same I/O operations
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>     <span style="color:#f92672">*</span>(_QWORD <span style="color:#f92672">*</span>)(DriverObject <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x70</span>) <span style="color:#f92672">=</span> DispatchRoutine_1;
-</span></span><span style="display:flex;"><span>     <span style="color:#f92672">*</span>(_QWORD <span style="color:#f92672">*</span>)(DriverObject <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x80</span>) <span style="color:#f92672">=</span> DispatchRoutine_1;
-</span></span><span style="display:flex;"><span>      
-</span></span><span style="display:flex;"><span>     <span style="color:#f92672">*</span>(_QWORD <span style="color:#f92672">*</span>)(DriverObject <span style="color:#f92672">+</span> <span style="color:#ae81ff">0xE0</span>) <span style="color:#f92672">=</span> ioctl_routine; <span style="color:#75715e">// offset 0xE0
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>      
-</span></span><span style="display:flex;"><span>     <span style="color:#75715e">// this is NOT a dispatch routine &amp; is for unloading the driver
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>     <span style="color:#75715e">// it is not important in this blog
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>     <span style="color:#f92672">*</span>(_QWORD <span style="color:#f92672">*</span>)(DriverObject <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x68</span>) <span style="color:#f92672">=</span> DriverUnload; 
+<p>Getting a pointer to the <code>DeviceControl</code> dispatch routine is extremely easy. Still within the <code>OEP</code>, the <code>IRP_MJ_DEVICE_CONTROL</code> constant can be used as an index into the <code>MajorFunction</code> array, whose entry would point to the <code>DeviceControl</code> dispatch routine. The psuedocode below also depicts how a single dispatch routine can be used to handle multiple I/O operations, as described earlier.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="cp">#define IRP_MJ_DEVICE_CONTROL 14
+</span></span></span><span class="line"><span class="cl"><span class="cp"></span>  <span class="k">if</span> <span class="p">(</span><span class="n">NT_SUCCESS</span><span class="p">(</span><span class="n">IoCreateSymbolicLink</span><span class="p">(</span><span class="o">&amp;</span><span class="n">DeviceName</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">DestinationString</span><span class="p">)))</span>
+</span></span><span class="line"><span class="cl">  <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="c1">// start of the major function array is at driver object + 0x70
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>      <span class="c1">// same dispatch routine for two I/O operations
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>      <span class="n">DriverObject</span><span class="o">-&gt;</span><span class="n">MajorFunction</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">SomeDispatchRoutine</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">      <span class="n">DriverObject</span><span class="o">-&gt;</span><span class="n">MajorFunction</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">SomeDispatchRoutine</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">      
+</span></span><span class="line"><span class="cl">      <span class="c1">// *(QWORD*)(DriverObject + 0xE0)
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>      <span class="n">DriverObject</span><span class="o">-&gt;</span><span class="n">MajorFunction</span><span class="p">[</span><span class="n">IRP_MJ_DEVICE_CONTROL</span><span class="p">]</span> <span class="o">=</span> <span class="n">ioctl_routine</span><span class="p">;</span> <span class="c1">// offset 0xE0
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>      
+</span></span><span class="line"><span class="cl">      <span class="c1">// this is NOT a dispatch routine &amp; is for unloading the driver
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>      <span class="c1">// it is not important in this blog
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>      <span class="n">DriverObject</span><span class="o">-&gt;</span><span class="n">DriverUnload</span> <span class="o">=</span> <span class="n">DriverUnload</span><span class="p">;</span> 
 </span></span></code></pre></div><h2 id="making-sense-of-the-arguments-passed-to-the-ioctl-handler">Making sense of the arguments passed to the IOCTL handler</h2>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">uint64_t</span> <span style="color:#66d9ef">__fastcall</span> ioctl_routine(<span style="color:#66d9ef">uint64_t</span> a1, <span style="color:#66d9ef">uint64_t</span> a2)
-</span></span></code></pre></div><p>So now it&rsquo;s finally time to end our analysis of the <code>OEP</code> and move into the dispatch routine that is invoked when we make a call to <code>DeviceIoControl</code>. We know that this is <code>IOCTLRoutine</code> from the code snippet above. The first step we should take is using logic to determine the meaning of the arguments passed to this routine. If we <code>xref</code> to this function, we&rsquo;ll find that it is only referenced when it is being written to the <code>MajorFunction</code> array, so we can only the reconstruct the real structures of these arguments from their use within the function, but before we do this, you should be introduced to the <code>SystemBuffer</code> field under the <code>IRP</code>.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="kt">uint64_t</span> <span class="kr">__fastcall</span> <span class="n">ioctl_routine</span><span class="p">(</span><span class="kt">uint64_t</span> <span class="n">a1</span><span class="p">,</span> <span class="kt">uint64_t</span> <span class="n">a2</span><span class="p">)</span>
+</span></span></code></pre></div><p>So now it&rsquo;s finally time to end our analysis of the <code>OEP</code> and move into the dispatch routine that is invoked when we make a call to <code>DeviceIoControl</code>. We know that this is <code>ioctl_routine</code> from the code snippet above. The first step we should take is using logic to determine the meaning of the arguments passed to this routine. If we <code>xref</code> to this function, we&rsquo;ll find that it is only referenced when it is being written to the <code>MajorFunction</code> array, so we can only reconstruct the real structures of these arguments from their use within the function, but before we do this, you should be introduced to the <code>SystemBuffer</code> field under the <code>IRP</code>.</p>
 <h3 id="irp-systembuffer">IRP-&gt;SystemBuffer</h3>
 <p>The <code>SystemBuffer</code> field under the <code>IRP</code> structure is used to hold the buffer for the current <code>I/O</code> operation during <code>METHOD_BUFFERED</code> <code>IOCTL</code> commands. This field is <code>0x18</code> bytes down the <code>IRP</code>, and if we look for references to <code>a2</code> (second argument) within the function, we can see that this offset is added to it. To assume that <code>a2</code> is of type <code>IRP</code> because <code>0x18</code> is added to it seems ludicrous at first, but we will do so because it&rsquo;s normal for the <code>IRP</code> to be passed to the <code>DeviceControl</code> dispatch routine (remember <code>DeviceIoControl</code> control flow analysis). This assumption is solidified when we look at other instances where <code>a2</code> is referenced, so we will re-name this &lsquo;Irp&rsquo;. Now, we can decipher other structures using our hypothesis that <code>a2</code> is the Irp.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>  IoStackLocation <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> <span style="color:#66d9ef">long</span> <span style="color:#f92672">*</span>)(Irp <span style="color:#f92672">+</span> <span style="color:#ae81ff">0xB8</span>);
-</span></span><span style="display:flex;"><span>  SystemBuffer <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(<span style="color:#66d9ef">int</span> <span style="color:#f92672">**</span>)(Irp <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x18</span>);
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">*</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> <span style="color:#f92672">*</span>)(Irp <span style="color:#f92672">+</span> <span style="color:#ae81ff">48</span>) <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">*</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> <span style="color:#66d9ef">long</span> <span style="color:#f92672">*</span>)(Irp <span style="color:#f92672">+</span> <span style="color:#ae81ff">56</span>) <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>i64;
-</span></span><span style="display:flex;"><span>  v4 <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> <span style="color:#66d9ef">long</span> <span style="color:#f92672">*</span>)(a1 <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x40</span>);
-</span></span><span style="display:flex;"><span>  ControlCode <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> <span style="color:#f92672">*</span>)(IoStackLocation <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x18</span>);
-</span></span><span style="display:flex;"><span>  
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> ( <span style="color:#f92672">*</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span>)IoStackLocation <span style="color:#f92672">!=</span> <span style="color:#ae81ff">14</span> )
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">goto</span> LABEL_132;
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">  <span class="n">IoStackLocation</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="kt">long</span> <span class="o">*</span><span class="p">)(</span><span class="n">Irp</span> <span class="o">+</span> <span class="mh">0xB8</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">SystemBuffer</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="kt">int</span> <span class="o">**</span><span class="p">)(</span><span class="n">Irp</span> <span class="o">+</span> <span class="mh">0x18</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="o">*</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="o">*</span><span class="p">)(</span><span class="n">Irp</span> <span class="o">+</span> <span class="mi">48</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="o">*</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="kt">long</span> <span class="o">*</span><span class="p">)(</span><span class="n">Irp</span> <span class="o">+</span> <span class="mi">56</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="n">i64</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">v4</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="kt">long</span> <span class="o">*</span><span class="p">)(</span><span class="n">a1</span> <span class="o">+</span> <span class="mh">0x40</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">ControlCode</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="o">*</span><span class="p">)(</span><span class="n">IoStackLocation</span> <span class="o">+</span> <span class="mh">0x18</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span> <span class="o">*</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">IoStackLocation</span> <span class="o">!=</span> <span class="mi">14</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="k">goto</span> <span class="n">LABEL_132</span><span class="p">;</span>
 </span></span></code></pre></div><p>Below is the psuedocode cleaned up, so you can understand more clearly.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#75715e">#define IRP_MJ_DEVICE_CONTROL 0xE
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
-</span></span><span style="display:flex;"><span>IoStackLocation <span style="color:#f92672">=</span> Irp<span style="color:#f92672">-&gt;</span>CurrentStackLocation;
-</span></span><span style="display:flex;"><span>SystemBuffer <span style="color:#f92672">=</span> Irp<span style="color:#f92672">-&gt;</span>SystemBuffer;
-</span></span><span style="display:flex;"><span>Irp<span style="color:#f92672">-&gt;</span>IoStatus<span style="color:#f92672">-&gt;</span>Status <span style="color:#f92672">=</span> NULL;
-</span></span><span style="display:flex;"><span>Irp<span style="color:#f92672">-&gt;</span>IoStatus<span style="color:#f92672">-&gt;</span>Information <span style="color:#f92672">=</span> NULL;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>v4 <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(QWORD<span style="color:#f92672">*</span>)(a1 <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x40</span>); <span style="color:#75715e">// Yet to be determined
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>ControlCode <span style="color:#f92672">=</span> IoStackLocation<span style="color:#f92672">-&gt;</span>IoControlCode;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e">/* Here we check if the I/O operation is for DeviceControl, 
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e">if it isn&#39;t we jmp to a location we will analyse later */</span>
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> (IoStackLocation<span style="color:#f92672">-&gt;</span>MajorFunction <span style="color:#f92672">!=</span> IRP_MJ_DEVICE_CONTROL) <span style="color:#66d9ef">goto</span> LABEL_132;
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="cp">#define IRP_MJ_DEVICE_CONTROL 0xE
+</span></span></span><span class="line"><span class="cl"><span class="cp"></span>
+</span></span><span class="line"><span class="cl"><span class="n">IoStackLocation</span> <span class="o">=</span> <span class="n">Irp</span><span class="o">-&gt;</span><span class="n">CurrentStackLocation</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">SystemBuffer</span> <span class="o">=</span> <span class="n">Irp</span><span class="o">-&gt;</span><span class="n">SystemBuffer</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">Irp</span><span class="o">-&gt;</span><span class="n">IoStatus</span><span class="o">-&gt;</span><span class="n">Status</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">Irp</span><span class="o">-&gt;</span><span class="n">IoStatus</span><span class="o">-&gt;</span><span class="n">Information</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">v4</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="n">QWORD</span><span class="o">*</span><span class="p">)(</span><span class="n">a1</span> <span class="o">+</span> <span class="mh">0x40</span><span class="p">);</span> <span class="c1">// Yet to be determined
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="n">ControlCode</span> <span class="o">=</span> <span class="n">IoStackLocation</span><span class="o">-&gt;</span><span class="n">IoControlCode</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="cm">/* Here we check if the I/O operation is for DeviceControl, 
+</span></span></span><span class="line"><span class="cl"><span class="cm">if it isn&#39;t we jmp to a location we will analyse later */</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">if</span> <span class="p">(</span><span class="n">IoStackLocation</span><span class="o">-&gt;</span><span class="n">MajorFunction</span> <span class="o">!=</span> <span class="n">IRP_MJ_DEVICE_CONTROL</span><span class="p">)</span> <span class="k">goto</span> <span class="n">LABEL_132</span><span class="p">;</span>
 </span></span></code></pre></div><p>Now we have all the information to begin constructing our communication buffers, so we will ignore <code>a1</code>. From experience, this is usually the <code>DEVICE_OBJECT</code> structure. This is where things get interesting - we will now start looking at the first vulnerability exposed by this driver.</p>
 <h2 id="allocate-contiguous-physical-memory">Allocate contiguous physical memory</h2>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> ( <span style="color:#f92672">*</span>(_BYTE <span style="color:#f92672">*</span>)IoStackLocation <span style="color:#f92672">!=</span> <span style="color:#ae81ff">14</span> )
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">goto</span> LABEL_132;
-</span></span><span style="display:flex;"><span>  ControlCode <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(_DWORD <span style="color:#f92672">*</span>)(IoStackLocation <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x18</span>);
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> ( ControlCode <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">0x222858</span> )
-</span></span><span style="display:flex;"><span>  {
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> ( ControlCode <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">0x22287C</span> )
-</span></span><span style="display:flex;"><span>    {
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">switch</span> ( ControlCode )
-</span></span><span style="display:flex;"><span>      {
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">case</span> <span style="color:#ae81ff">0x222880u</span><span style="color:#f92672">:</span>
-</span></span><span style="display:flex;"><span>          StatusCode <span style="color:#f92672">=</span> sub_11F48((_UNICODE_STRING <span style="color:#f92672">*</span>)SystemBuffer);
-</span></span><span style="display:flex;"><span>          <span style="color:#f92672">*</span>(_DWORD <span style="color:#f92672">*</span>)(Irp <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x30</span>) <span style="color:#f92672">=</span> StatusCode;
-</span></span><span style="display:flex;"><span>          <span style="color:#66d9ef">if</span> ( StatusCode <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">0</span> )
-</span></span></code></pre></div><p>This code snippet teaches us more about how control codes are used to allow a user-mode application to specify what operations they want to get executed. If I wanted <code>sub_11F48</code> to be called, I would pass in the control code <code>0x222880u</code> to <code>DeviceIoControl</code>. Below you can see the logic of <code>sub_11F48</code> in the psuedocode, keep in mind the argument passed to it - which is the buffer that data gets written to/read from. This is the first communication structure we will recreate.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>NTSTATUS <span style="color:#66d9ef">__fastcall</span> <span style="color:#a6e22e">sub_11F48</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> <span style="color:#f92672">*</span>CommunicationBuffer)
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">__int64</span> ContiguousMemorySpecifyCache; <span style="color:#75715e">// rax
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">*</span>((QWORD <span style="color:#f92672">*</span>)CommunicationBuffer <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>) <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>i64;
-</span></span><span style="display:flex;"><span>  ContiguousMemorySpecifyCache <span style="color:#f92672">=</span> MmAllocateContiguousMemorySpecifyCache(
-</span></span><span style="display:flex;"><span>                                   <span style="color:#f92672">*</span>CommunicationBuffer,
-</span></span><span style="display:flex;"><span>                                   <span style="color:#ae81ff">0x100000</span>,
-</span></span><span style="display:flex;"><span>                                   <span style="color:#ae81ff">4026531840</span>,
-</span></span><span style="display:flex;"><span>                                   <span style="color:#ae81ff">0x10000</span>,
-</span></span><span style="display:flex;"><span>                                   <span style="color:#ae81ff">0</span>);
-</span></span><span style="display:flex;"><span>                                   
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">*</span>((QWORD <span style="color:#f92672">*</span>)CommunicationBuffer <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>) <span style="color:#f92672">=</span> ContiguousMemorySpecifyCache;
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> ( not ContiguousMemorySpecifyCache ) <span style="color:#66d9ef">return</span> STATUS_UNSUCCESSFUL;
-</span></span><span style="display:flex;"><span>    
-</span></span><span style="display:flex;"><span>  CommunicationBuffer[<span style="color:#ae81ff">1</span>] <span style="color:#f92672">=</span> MmGetPhysicalAddress(ContiguousMemorySpecifyCache);
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>i64;
-</span></span><span style="display:flex;"><span>}
-</span></span></code></pre></div><p>The first important thing we should take notice of in this psuedocode is the write to <code>CommunicationBuffer + 1</code>. In C, we know that an array will decay to a pointer to the first element in a range of contiguous elements, so  <code>*((QWORD *)CommunicationBuffer + 1)</code> must be identical to <code>CommunicationBuffer[1]</code>. So straight away, we know when this dispatch routine handler is invoked, it takes the input buffer and makes a write 8 bytes down with the value 0. The use and type of the previous 8 bytes below the starting address of the write are currently unknown. They could be two 32-bit integers, one 64-bit integer, 8 8-bit integers etc; right now we just know that 8 bytes down the start of the buffer is a 64-bit integer, because of the 0i64 written into it. Now you may have falsely made the assumption that because 8 bytes down the buffer is a 64-bit integer, the first subobject in this contiguous buffer is guaranteed to be a 64-bit integer, because arrays always consists of subojects of the same type. However, it is not mandatory that the buffer in <code>METHOD_BUFFERED</code> <code>IOCTL</code> operations must be an array. They can be structures or trivial classes in which the space occupied by each suboject in the buffer differs, essentially a heterogeneous array - this is actually quite common. So, when deducing the type of an element in the buffer/communication structure, it should not be generalised based on the type of one of its members in the contiguous array, but how it is used within the dispatch routine (or the routine called by the dispatch routine that maps to the control code specified). In this case, the subojects are of the same type, so the buffer can be constructed as a normal array. I came to this conclusion by looking at the use of the first subobject, and we see it&rsquo;s the first argument in <code>MmAllocateContiguousMemorySpecifyCache</code>. The documentation for this routine states that this argument should be of type <code>int64</code>, which is the same type as the second subobject in the buffer. Furthermore, the purpose of this argument is to represent the amount of bytes that should be allocated with <code>MmAllocateContiguousMemorySpecifyCache</code>, so the first subobject in our buffer should be representative of this. The use of the second argument is better understood if the buffer were manipulated structurally, so I&rsquo;ve casted the buffer to a <code>UNICODE_STRING</code>, which you can see below, along with the layout of <code>UNICODE_STRING</code></p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">_UNICODE_STRING</span>
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>    USHORT Length;                                                          <span style="color:#75715e">//0x0
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    USHORT MaximumLength;                                                   <span style="color:#75715e">//0x2
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    WCHAR<span style="color:#f92672">*</span> Buffer;                                                          <span style="color:#75715e">//0x8
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>}; 
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>NTSTATUS <span style="color:#66d9ef">__fastcall</span> <span style="color:#a6e22e">sub_11F48</span>(_UNICODE_STRING <span style="color:#f92672">*</span>CommunicationBuffer)
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>  WCHAR <span style="color:#f92672">*</span>ContiguousMemorySpecifyCache; <span style="color:#75715e">// rax
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
-</span></span><span style="display:flex;"><span>  CommunicationBuffer<span style="color:#f92672">-&gt;</span>Buffer <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>i64;
-</span></span><span style="display:flex;"><span>  ContiguousMemorySpecifyCache <span style="color:#f92672">=</span> (WCHAR <span style="color:#f92672">*</span>)MmAllocateContiguousMemorySpecifyCache(
-</span></span><span style="display:flex;"><span>                                            <span style="color:#f92672">*</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> <span style="color:#f92672">*</span>)<span style="color:#f92672">&amp;</span>CommunicationBuffer<span style="color:#f92672">-&gt;</span>Length,
-</span></span><span style="display:flex;"><span>                                            <span style="color:#ae81ff">0x100000</span>i64,
-</span></span><span style="display:flex;"><span>                                            <span style="color:#ae81ff">4026531840</span>i64,
-</span></span><span style="display:flex;"><span>                                            <span style="color:#ae81ff">0x10000</span>i64,
-</span></span><span style="display:flex;"><span>                                            <span style="color:#ae81ff">0</span>);
-</span></span><span style="display:flex;"><span>  CommunicationBuffer<span style="color:#f92672">-&gt;</span>Buffer <span style="color:#f92672">=</span> ContiguousMemorySpecifyCache;
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> ( <span style="color:#f92672">!</span>ContiguousMemorySpecifyCache ) <span style="color:#66d9ef">return</span> STATUS_UNSUCCESSFUL;
-</span></span><span style="display:flex;"><span>  
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">*</span>(_DWORD <span style="color:#f92672">*</span>)(<span style="color:#f92672">&amp;</span>CommunicationBuffer<span style="color:#f92672">-&gt;</span>MaximumLength <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>) <span style="color:#f92672">=</span> 
-</span></span><span style="display:flex;"><span>  				MmGetPhysicalAddress(ContiguousMemorySpecifyCache);
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>;
-</span></span><span style="display:flex;"><span> }
-</span></span></code></pre></div><p>We initially see nothing unusual, there is a write to 8 bytes down (<code>UNICODE_STRING-&gt;Buffer</code>) the beginning of the buffer with the return value of <code>MmAllocateContiguousMemorySpecifyCache</code>, which is the start of the system virtual memory that we allocated - this is what we expected. However, we later then see <code>*(DWORD *)(&amp;CommunicationBuffer-&gt;MaximumLength + 1)</code> - which is <code>*((QWORD *)CommunicationBuffer + (1/2))</code> - being written to with the physical address, meaning the last 32 bits of the first subobject within the buffer gets overwritten from the amount of memory we want to allocate to the 32 bits from the physical address returned by <code>MmGetPhysicalAddress</code>. This is interesting, because it indicates to us that our communication structure should be not be an array of 2 int64s, but 2 int32s and 1 int64. The first subobject of type int32 in our buffer should specify the size, as usual. The second subobject of type int32 should represent 32 bits from the physical address that maps to the kernel memory we allocated, and the third (int64) should remain the same (return value of <code>MmAllocateContiguousMemorySpecifyCache</code>). This way, no bytes are overwritten. However, the price to pay for this structural change is that the maximum amount of memory that could be possibly allocated has been truncated to <code>(2 ^ 32)</code>, from <code>(2 ^ 64)</code>, which is fortunately still a lot of memory. So now, we have two possible options for our communication structure that will server as the <code>InputBuffer</code> to <code>DeviceIoControl</code>. If you somehow haven&rsquo;t noticed already, size is the only member/suboject we have to specify, and our driver returns to us the physical address and start of the kernel virtual range.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-c++" data-lang="c++"><span style="display:flex;"><span><span style="color:#75715e">// case 1 (no bytes are overwritten but maximum memory that can be allocated is truncated):
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e">#pragma pack(push, 1)
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">typedef</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">_ALLOCATE_CONTIGUOUS_MEMORY</span>
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>   <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> Size;
-</span></span><span style="display:flex;"><span>   <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> PhysicalAddress_32bits;
-</span></span><span style="display:flex;"><span>   <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> <span style="color:#66d9ef">long</span> KernelVirtualMemoryBuffer;
-</span></span><span style="display:flex;"><span>}ALLOCATE_CONTIGUOUS_MEMORY, <span style="color:#f92672">*</span> PALLOCATE_CONTIGUOUS_MEMORY;
-</span></span><span style="display:flex;"><span><span style="color:#75715e">#pragma pack(pop)
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e">// case 2 (bytes get overwritten but more memory can be allocated):
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
-</span></span><span style="display:flex;"><span>DWORDLONG InputArg[<span style="color:#ae81ff">2</span>];
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e">// case 2 represented as a structure:
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e">#pragma pack(push, 1)
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">typedef</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">_ALLOCATE_CONTIGUOUS_MEMORY</span>
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>   <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> <span style="color:#66d9ef">long</span> Size_And_Physical;
-</span></span><span style="display:flex;"><span>   <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> <span style="color:#66d9ef">long</span> KernelVirtualMemoryBuffer;
-</span></span><span style="display:flex;"><span>}ALLOCATE_CONTIGUOUS_MEMORY, <span style="color:#f92672">*</span> PALLOCATE_CONTIGUOUS_MEMORY;
-</span></span><span style="display:flex;"><span><span style="color:#75715e">#pragma pack(pop)
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">if</span> <span class="p">(</span> <span class="o">*</span><span class="p">(</span><span class="n">_BYTE</span> <span class="o">*</span><span class="p">)</span><span class="n">IoStackLocation</span> <span class="o">!=</span> <span class="mi">14</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="k">goto</span> <span class="n">LABEL_132</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">ControlCode</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="n">_DWORD</span> <span class="o">*</span><span class="p">)(</span><span class="n">IoStackLocation</span> <span class="o">+</span> <span class="mh">0x18</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span> <span class="n">ControlCode</span> <span class="o">&gt;</span> <span class="mh">0x222858</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span> <span class="n">ControlCode</span> <span class="o">&gt;</span> <span class="mh">0x22287C</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="k">switch</span> <span class="p">(</span> <span class="n">ControlCode</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">      <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="k">case</span> <span class="mh">0x222880u</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">          <span class="n">StatusCode</span> <span class="o">=</span> <span class="n">sub_11F48</span><span class="p">((</span><span class="n">_UNICODE_STRING</span> <span class="o">*</span><span class="p">)</span><span class="n">SystemBuffer</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">          <span class="o">*</span><span class="p">(</span><span class="n">_DWORD</span> <span class="o">*</span><span class="p">)(</span><span class="n">Irp</span> <span class="o">+</span> <span class="mh">0x30</span><span class="p">)</span> <span class="o">=</span> <span class="n">StatusCode</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">          <span class="k">if</span> <span class="p">(</span> <span class="n">StatusCode</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="p">)</span>
+</span></span></code></pre></div><p>This code snippet teaches us more about how control codes are used to allow a user-mode application to specify what operations they want to get executed. If I wanted <code>sub_11F48</code> to be called, I would pass in the control code <code>0x222880u</code> to <code>DeviceIoControl</code>. Below you can see the logic of <code>sub_11F48</code> in the psuedo-code, keep in mind the argument passed to it - which is the buffer that data gets written to/read from. This is the first communication structure we will recreate.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="kr">__int64</span> <span class="kr">__fastcall</span> <span class="nf">sub_11F48</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kr">__int64</span> <span class="o">*</span><span class="n">ComunicationBuffer</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="kr">__int64</span> <span class="n">ContiguousMemorySpecifyCache</span><span class="p">;</span> <span class="c1">// rax
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>
+</span></span><span class="line"><span class="cl">  <span class="n">ComunicationBuffer</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span><span class="n">i64</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">ContiguousMemorySpecifyCache</span> <span class="o">=</span> <span class="n">MmAllocateContiguousMemorySpecifyCache</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">                                   <span class="o">*</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="o">*</span><span class="p">)</span><span class="n">ComunicationBuffer</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                   <span class="mh">0x100000</span><span class="n">i64</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                   <span class="mi">4026531840</span><span class="n">i64</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                   <span class="mh">0x10000</span><span class="n">i64</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                   <span class="mi">0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">ComunicationBuffer</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">ContiguousMemorySpecifyCache</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span> <span class="o">!</span><span class="n">ContiguousMemorySpecifyCache</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">STATUS_UNSUCCESSFUL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="o">*</span><span class="p">((</span><span class="n">_DWORD</span> <span class="o">*</span><span class="p">)</span><span class="n">ComunicationBuffer</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">=</span> <span class="n">MmGetPhysicalAddress</span><span class="p">(</span><span class="n">ContiguousMemorySpecifyCache</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="mi">0</span><span class="n">i64</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></div><p>The first important thing to note is that 8 bytes down our communication buffer is being overwritten with 0. This indicates to the client sending the IOCTL request that this field in our communication structure can be left uninitialised. Before we continue analysisng this function, we should recognise that all our communication structure is, is an array of bytes. Although the psuedo-code presents it as an array of <code>QWORD</code> objects, a communication buffer can be a tuple of heterogenous objects represented by a trivial class, or just a regular array; just a byte sequence. When we identify the second instance where the <code>CommunicationBuffer</code> is being referenced, we can see the element or field in our communication buffer is being treated as a <code>DWORD</code> object as the first argument to <code>MmAllocateContiguousMemorySpecifyCache</code> to represent the size of the allocation, which corroborates the point presented above. Then, 8 bytes down ( represented by the expression <code>CommunicationBuffer[1]</code> ) our communication buffer, which was set to 0 at the start of the function, is being reinitialised with the base of the contiguous memory, in other words the return value of <code>MmAllocateContiguousMemorySpecifyCache</code>. This field will get set regardless of whether or not the allocation succeeded, so the client ( our usermode process ) should take that into consideration. Lastly, the physical address of the allocation is set 4 bytes down ( represented by the expression <code>*((_DWORD *)ComunicationBuffer + 1)</code> ) the communication buffer. From this we can deduce the total size of the communication buffer in this instance is 16 bytes. Whether we - as the client making the IOCTL request - treat this as an array of two <code>QWORD</code>s or a structure consisting of two <code>DWORD</code> objects followed by a <code>QWORD</code> object depends on our intentions, though the latter method is likely what <code>ASRock</code> intended when developing this driver. In the case of the former, one of our <code>QWORD</code> objects will be overwritten with the physical address, however the maximum amount of memory we can allocate is 2^64 (case 2). With the latter case, the maximum amount of memory we can allocate has been truncated to 2^32, which is still fortunately plenty. Moreover, in this case, no bytes get overwritten (case 1). Below shows the different communication structures we can devise with this information.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-c++" data-lang="c++"><span class="line"><span class="cl"><span class="c1">// case 1 (idiomatic method, no bytes are overwritten but maximum memory that can be allocated is truncated):
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>
+</span></span><span class="line"><span class="cl"><span class="cp">#pragma pack(push, 1)
+</span></span></span><span class="line"><span class="cl"><span class="cp"></span><span class="k">typedef</span> <span class="k">struct</span> <span class="nc">_ALLOCATE_CONTIGUOUS_MEMORY</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">   <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">Size</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">   <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">PhysicalAddress_32bits</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">   <span class="kt">unsigned</span> <span class="kt">long</span> <span class="kt">long</span> <span class="n">KernelVirtualMemoryBuffer</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span><span class="n">ALLOCATE_CONTIGUOUS_MEMORY</span><span class="p">,</span> <span class="o">*</span> <span class="n">PALLOCATE_CONTIGUOUS_MEMORY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="cp">#pragma pack(pop)
+</span></span></span><span class="line"><span class="cl"><span class="cp"></span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">// case 2 (bytes get overwritten but more memory can be allocated):
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>
+</span></span><span class="line"><span class="cl"><span class="n">DWORDLONG</span> <span class="n">InputArg</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">// case 2 represented as a structure:
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>
+</span></span><span class="line"><span class="cl"><span class="cp">#pragma pack(push, 1)
+</span></span></span><span class="line"><span class="cl"><span class="cp"></span><span class="k">typedef</span> <span class="k">struct</span> <span class="nc">_ALLOCATE_CONTIGUOUS_MEMORY</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">   <span class="kt">unsigned</span> <span class="kt">long</span> <span class="kt">long</span> <span class="n">Size_And_Physical</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">   <span class="kt">unsigned</span> <span class="kt">long</span> <span class="kt">long</span> <span class="n">KernelVirtualMemoryBuffer</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span><span class="n">ALLOCATE_CONTIGUOUS_MEMORY</span><span class="p">,</span> <span class="o">*</span> <span class="n">PALLOCATE_CONTIGUOUS_MEMORY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="cp">#pragma pack(pop)
 </span></span></span></code></pre></div><p>Now we have all the information we need to talk to our vulnerable driver and force it to allocate kernel space virtual memory that is contiguous in physical memory. We have our handle to the device object, we have the communcation structures properly set up and we have the correct control code. Below shows a code snippet using the second communication structure discussed above.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">typedef</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">_OUTPUT_INFORMATION</span>
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> PhysicalAddress_32bits;
-</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> <span style="color:#66d9ef">long</span> KernelVirtualMemoryBuffer;
-</span></span><span style="display:flex;"><span>} OUTPUT_INFORMATION, <span style="color:#f92672">*</span> POUTPUT_INFORMATION;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">allocate_kernel_memory</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">__int64</span> size, OUTPUT_INFORMATION<span style="color:#f92672">&amp;</span> info)
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>	<span style="color:#75715e">// array of 64-bit integers
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>	std<span style="color:#f92672">::</span>remove_reference<span style="color:#f92672">&lt;</span> <span style="color:#66d9ef">decltype</span>( size ) <span style="color:#f92672">&gt;::</span>type input_buffer[<span style="color:#ae81ff">2</span>];
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>	<span style="color:#75715e">// set the first suboject in the array to the amount of memory we want to allocate
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>	<span style="color:#f92672">*</span>input_buffer <span style="color:#f92672">=</span> size;
-</span></span><span style="display:flex;"><span>    
-</span></span><span style="display:flex;"><span>	<span style="color:#75715e">// send a message to the driver to allocate kernel memory using the ctl code
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>	<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> bytes_returned <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
-</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">if</span> (not DeviceIoControl(drv_handle, <span style="color:#ae81ff">0x222880</span>, <span style="color:#f92672">&amp;</span>input_buffer, <span style="color:#66d9ef">sizeof</span>(input_buffer),
-</span></span><span style="display:flex;"><span>		<span style="color:#f92672">&amp;</span>input_buffer, <span style="color:#66d9ef">sizeof</span>(input_buffer), <span style="color:#f92672">&amp;</span>bytes_returned, <span style="color:#66d9ef">nullptr</span>)) <span style="color:#66d9ef">return</span> false;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>	info.KernelVirtualMemoryBuffer <span style="color:#f92672">=</span> input_buffer[<span style="color:#ae81ff">1</span>];
-</span></span><span style="display:flex;"><span>	info.PhysicalAddress_32bits <span style="color:#f92672">=</span> (<span style="color:#f92672">*</span>input_buffer) <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0xFFFFFFFF</span>;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">return</span> true;
-</span></span><span style="display:flex;"><span>}
-</span></span></code></pre></div><p>The virtual memory manager does not ensure memory allocated in system space will not exceed the lifetime of the component that allocated it. This means using a vulnerable driver to allocate memory puts us at risk of a memory leak, when we unload the driver without freeing any memory, all our allocations are still active. Luckily, this driver exposes <code>MmFreeContiguousMemorySpecifyCache as well</code>. Before we move on, we should note that the protection of this allocated memory is not necessarily <code>RWX</code>. With virtualisation based security (<code>VBS</code>) &amp; memory integrity (<code>HVCI</code>) enabled, <code>EPTEs</code> trump the normal description placed on virtual memory by <code>PTEs</code>, ensuring that no kernel page, except special kernel pages, can be <code>RWX</code>. This blog isn&rsquo;t at all about these topics, so we should move on, just note that these security mechanisms are enabled on default windows 11.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="k">typedef</span> <span class="k">struct</span> <span class="nc">_OUTPUT_INFORMATION</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">PhysicalAddress_32bits</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="kt">long</span> <span class="n">KernelVirtualMemoryBuffer</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span> <span class="n">OUTPUT_INFORMATION</span><span class="p">,</span> <span class="o">*</span> <span class="n">POUTPUT_INFORMATION</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="kt">bool</span> <span class="nf">allocate_kernel_memory</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kr">__int64</span> <span class="n">size</span><span class="p">,</span> <span class="n">OUTPUT_INFORMATION</span><span class="o">&amp;</span> <span class="n">info</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="c1">// array of 64-bit integers
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="n">std</span><span class="o">::</span><span class="n">remove_reference</span><span class="o">&lt;</span> <span class="k">decltype</span><span class="p">(</span> <span class="n">size</span> <span class="p">)</span> <span class="o">&gt;::</span><span class="n">type</span> <span class="n">input_buffer</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="c1">// set the first suboject in the array to the amount of memory we want to allocate
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="o">*</span><span class="n">input_buffer</span> <span class="o">=</span> <span class="n">size</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    
+</span></span><span class="line"><span class="cl">	<span class="c1">// send a message to the driver to allocate kernel memory using the ctl code
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">bytes_returned</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="p">(</span><span class="n">not</span> <span class="n">DeviceIoControl</span><span class="p">(</span><span class="n">drv_handle</span><span class="p">,</span> <span class="mh">0x222880</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">input_buffer</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">input_buffer</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">		<span class="o">&amp;</span><span class="n">input_buffer</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">input_buffer</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">bytes_returned</span><span class="p">,</span> <span class="k">nullptr</span><span class="p">))</span> <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">info</span><span class="p">.</span><span class="n">KernelVirtualMemoryBuffer</span> <span class="o">=</span> <span class="n">input_buffer</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">	<span class="n">info</span><span class="p">.</span><span class="n">PhysicalAddress_32bits</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">input_buffer</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mh">0xFFFFFFFF</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></div><p>The virtual memory manager does not ensure memory allocated in system space will not exceed the lifetime of the component that allocated it. This means using a vulnerable driver to allocate memory puts us at risk of a memory leak, when we unload the driver without freeing any memory, all our dynamic allocations are still active. Luckily, this driver exposes <code>MmFreeContiguousMemorySpecifyCache</code> as well. Before we move on, we should note that the protection of this allocated memory is not necessarily <code>RWX</code>. With <a href="https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/oem-vbs">virtualisation based security</a> &amp; memory integrity (<code>HVCI</code>) enabled, <a href="https://en.wikipedia.org/wiki/Second_Level_Address_Translation">extended/nested page tables</a> trump the normal description placed on virtual memory by <code>PTEs</code>, ensuring that no kernel page, except special kernel pages, can be <code>RWX</code>. This blog isn&rsquo;t at all about these topics, so we should move on, just note that these security mechanisms are enabled on default windows 11.</p>
 <h2 id="free-contiguous-memory">Free Contiguous Memory</h2>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>  <span style="color:#66d9ef">case</span> <span style="color:#ae81ff">0x222884u</span><span style="color:#f92672">:</span>
-</span></span><span style="display:flex;"><span>    MmFreeContiguousMemorySpecifyCache(<span style="color:#f92672">*</span>(<span style="color:#66d9ef">uint64_t</span><span style="color:#f92672">*</span>)(SystemBuffer <span style="color:#f92672">+</span> <span style="color:#ae81ff">8</span>), 
-</span></span><span style="display:flex;"><span>            <span style="color:#f92672">*</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> <span style="color:#f92672">*</span>)SystemBuffer, <span style="color:#ae81ff">0</span>i64);
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">goto</span> LABEL_132;
-</span></span></code></pre></div><p>Using the tactics described in the previous section, we can construct our communication buffer and send a request to the vulnerable driver with the appropriate control code <code>0x222884</code>. The driver allows us to specify the range (size) we want to free, which will be the second subobject in the buffer, and of course the starting address of the buffer that is to be freed, which will be the first. Like last time, we can pass a normal array or a structure, but the maximum number of subobjects is 2. The structure would consist of an int32 and an <code>int64</code> in that order, and the array would have to be of type <code>int64</code>. I will show the code example below using a structure this time, so we know how to communicate in both ways.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#75715e">#pragma pack(push, 1)
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">typedef</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">_FREE_CONTIGUOUS_MEMORY</span>
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> <span style="color:#66d9ef">long</span> StartingVA;
-</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">long</span> Size;
-</span></span><span style="display:flex;"><span>} FREE_CONTIGUOUS_MEMORY, <span style="color:#f92672">*</span> PFREE_CONTIGUOUS_MEMORY;
-</span></span><span style="display:flex;"><span><span style="color:#75715e">#pragma pack(pop)
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">void</span> <span style="color:#a6e22e">free_kernel_memory</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">__int32</span> size, <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">__int64</span> starting_va)
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>	<span style="color:#75715e">// set up the structure
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>	FREE_CONTIGUOUS_MEMORY buffer{};
-</span></span><span style="display:flex;"><span>	buffer.StartingVA <span style="color:#f92672">=</span> starting_va;
-</span></span><span style="display:flex;"><span>	buffer.Size <span style="color:#f92672">=</span> size;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>	<span style="color:#75715e">// tell our vuln driver to free memory
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>	DWORD bytes_returned{};
-</span></span><span style="display:flex;"><span>	DeviceIoControl(drv_handle, <span style="color:#ae81ff">0x222884</span>, <span style="color:#f92672">&amp;</span>buffer, 
-</span></span><span style="display:flex;"><span>    		<span style="color:#66d9ef">sizeof</span>(buffer), <span style="color:#f92672">&amp;</span>buffer, <span style="color:#66d9ef">sizeof</span>(buffer), <span style="color:#f92672">&amp;</span>bytes_returned, <span style="color:#66d9ef">nullptr</span>);
-</span></span><span style="display:flex;"><span>}
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">  <span class="k">case</span> <span class="mh">0x222884u</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">    <span class="n">MmFreeContiguousMemorySpecifyCache</span><span class="p">(</span><span class="o">*</span><span class="p">(</span><span class="kt">uint64_t</span><span class="o">*</span><span class="p">)(</span><span class="n">SystemBuffer</span> <span class="o">+</span> <span class="mi">8</span><span class="p">),</span> 
+</span></span><span class="line"><span class="cl">            <span class="o">*</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="o">*</span><span class="p">)</span><span class="n">SystemBuffer</span><span class="p">,</span> <span class="mi">0</span><span class="n">i64</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="k">goto</span> <span class="n">LABEL_132</span><span class="p">;</span>
+</span></span></code></pre></div><p>Using the tactics described in the previous section, we can construct our communication buffer and send a request to the vulnerable driver with the appropriate control code <code>0x222884</code>. The driver allows us to specify the range (size) we want to free, which will be the second subobject in the buffer, and of course the starting address of the buffer that is to be freed, which will be the first. Like last time, we can pass a normal array or a structure, but the required number of subobjects is 2. The structure would consist of an <code>int32</code> and an <code>int64</code> respectively, and the array would have to be of type <code>int64</code>. I will show the code example below using a structure this time, so we know how to communicate in both ways.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="cp">#pragma pack(push, 1)
+</span></span></span><span class="line"><span class="cl"><span class="cp"></span><span class="k">typedef</span> <span class="k">struct</span> <span class="nc">_FREE_CONTIGUOUS_MEMORY</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="kt">long</span> <span class="n">StartingVA</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">Size</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span> <span class="n">FREE_CONTIGUOUS_MEMORY</span><span class="p">,</span> <span class="o">*</span> <span class="n">PFREE_CONTIGUOUS_MEMORY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="cp">#pragma pack(pop)
+</span></span></span><span class="line"><span class="cl"><span class="cp"></span>
+</span></span><span class="line"><span class="cl"><span class="kt">void</span> <span class="nf">free_kernel_memory</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kr">__int32</span> <span class="n">size</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kr">__int64</span> <span class="n">starting_va</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="c1">// set up the structure
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="n">FREE_CONTIGUOUS_MEMORY</span> <span class="n">buffer</span><span class="p">{};</span>
+</span></span><span class="line"><span class="cl">	<span class="n">buffer</span><span class="p">.</span><span class="n">StartingVA</span> <span class="o">=</span> <span class="n">starting_va</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="n">buffer</span><span class="p">.</span><span class="n">Size</span> <span class="o">=</span> <span class="n">size</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="c1">// tell our vuln driver to free memory
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="n">DWORD</span> <span class="n">bytes_returned</span><span class="p">{};</span>
+</span></span><span class="line"><span class="cl">	<span class="n">DeviceIoControl</span><span class="p">(</span><span class="n">drv_handle</span><span class="p">,</span> <span class="mh">0x222884</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">buffer</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">    		<span class="k">sizeof</span><span class="p">(</span><span class="n">buffer</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">buffer</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buffer</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">bytes_returned</span><span class="p">,</span> <span class="k">nullptr</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></div><p>Now you have a basic understanding of reversing the dispatch routine to recreate communication structures, we&rsquo;ll advanced to our next vulnerability: read &amp; write control registers.</p>
 <h2 id="readwrite-control-registers">Read/Write Control Registers</h2>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> ( <span style="color:#f92672">!</span>v79 )
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> ( <span style="color:#f92672">*</span>(_DWORD <span style="color:#f92672">*</span>)SystemBuffer ) {
-</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">switch</span> ( <span style="color:#f92672">*</span>(_DWORD <span style="color:#f92672">*</span>)SystemBuffer )
-</span></span><span style="display:flex;"><span>            {
-</span></span><span style="display:flex;"><span>              <span style="color:#66d9ef">case</span> <span style="color:#ae81ff">2</span><span style="color:#f92672">:</span>
-</span></span><span style="display:flex;"><span>                CurrentIrql <span style="color:#f92672">=</span> __readcr2();
-</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">break</span>;
-</span></span><span style="display:flex;"><span>              <span style="color:#66d9ef">case</span> <span style="color:#ae81ff">3</span><span style="color:#f92672">:</span>
-</span></span><span style="display:flex;"><span>                CurrentIrql <span style="color:#f92672">=</span> __readcr3();
-</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">break</span>;
-</span></span><span style="display:flex;"><span>              <span style="color:#66d9ef">case</span> <span style="color:#ae81ff">4</span><span style="color:#f92672">:</span>
-</span></span><span style="display:flex;"><span>                CurrentIrql <span style="color:#f92672">=</span> __readcr4();
-</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">break</span>;
-</span></span><span style="display:flex;"><span>              <span style="color:#66d9ef">case</span> <span style="color:#ae81ff">8</span><span style="color:#f92672">:</span>
-</span></span><span style="display:flex;"><span>                CurrentIrql <span style="color:#f92672">=</span> KeGetCurrentIrql();
-</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">break</span>;
-</span></span><span style="display:flex;"><span>              <span style="color:#66d9ef">default</span><span style="color:#f92672">:</span>
-</span></span><span style="display:flex;"><span>                <span style="color:#f92672">*</span>(_QWORD <span style="color:#f92672">*</span>)(Irp <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x38</span>) <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>i64;
-</span></span><span style="display:flex;"><span>                <span style="color:#f92672">*</span>(_DWORD <span style="color:#f92672">*</span>)(Irp <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x30</span>) <span style="color:#f92672">=</span> <span style="color:#ae81ff">0xC0000001</span>;
-</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">goto</span> LABEL_132;
-</span></span><span style="display:flex;"><span>            }
-</span></span><span style="display:flex;"><span>    }
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">else</span>
-</span></span><span style="display:flex;"><span>    {
-</span></span><span style="display:flex;"><span>            CurrentIrql <span style="color:#f92672">=</span> __readcr0();
-</span></span><span style="display:flex;"><span>    }
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span> <span class="o">!</span><span class="n">v79</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span> <span class="o">*</span><span class="p">(</span><span class="n">_DWORD</span> <span class="o">*</span><span class="p">)</span><span class="n">SystemBuffer</span> <span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="k">switch</span> <span class="p">(</span> <span class="o">*</span><span class="p">(</span><span class="n">_DWORD</span> <span class="o">*</span><span class="p">)</span><span class="n">SystemBuffer</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">            <span class="p">{</span>
+</span></span><span class="line"><span class="cl">              <span class="k">case</span> <span class="mi">2</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">                <span class="n">CurrentIrql</span> <span class="o">=</span> <span class="n">__readcr2</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">                <span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">              <span class="k">case</span> <span class="mi">3</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">                <span class="n">CurrentIrql</span> <span class="o">=</span> <span class="n">__readcr3</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">                <span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">              <span class="k">case</span> <span class="mi">4</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">                <span class="n">CurrentIrql</span> <span class="o">=</span> <span class="n">__readcr4</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">                <span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">              <span class="k">case</span> <span class="mi">8</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">                <span class="n">CurrentIrql</span> <span class="o">=</span> <span class="n">KeGetCurrentIrql</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">                <span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">              <span class="k">default</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">                <span class="o">*</span><span class="p">(</span><span class="n">_QWORD</span> <span class="o">*</span><span class="p">)(</span><span class="n">Irp</span> <span class="o">+</span> <span class="mh">0x38</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="n">i64</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">                <span class="o">*</span><span class="p">(</span><span class="n">_DWORD</span> <span class="o">*</span><span class="p">)(</span><span class="n">Irp</span> <span class="o">+</span> <span class="mh">0x30</span><span class="p">)</span> <span class="o">=</span> <span class="mh">0xC0000001</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">                <span class="k">goto</span> <span class="n">LABEL_132</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="k">else</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="n">CurrentIrql</span> <span class="o">=</span> <span class="n">__readcr0</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
 </span></span></code></pre></div><p>From this snippet, we can see that the first subobject within the communication buffer should represent the control register we want to read from. We aren&rsquo;t allowed to read every control register that there is, and in the case we pass an option that is not present, our driver returns to us the <code>STATUS_UNSUCCESSFUL</code> <code>NTSTATUS</code> error code. We are also allowed to obtain the current <code>IRQL</code>, which is just a read from <code>cr8</code>. The read <code>cr3</code> privilege exposed would work well with the map physical &amp; read/write vulnerability that we will inspect later, but unfortunately there are some security mitigations involving <code>MmMapIoSpace</code> that prevent us from mapping page tables, but you could try on older versions of windows. The only ambiguity associated with this vulnerability is its control code, due to the way the psuedocode is presented to us. Luckily, deciphering it is just a matter of adding numbers. We can see that the condition for this vulnerability to be executed is satisfied when <code>v79</code> is 0. I&rsquo;ve highlighted all the lines associated with <code>v79</code>, whether explicitly or not, until we have a hardcoded value. Using this techqniue, we know that <code>ControlCode - 2238556 - 16 = 0</code>, and so we make ControlCode the subject of the equation to get its value. We subtract 16 because it is the product of 4*4, since 4 was subtracted from the original control code 4 times. Now we know that our control code is <code>2238572</code> or <code>0x22286C</code> for reading control registers, we can send a request to our driver.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">__int64</span> <span style="color:#a6e22e">read_cr</span>(<span style="color:#66d9ef">uint64_t</span> control_reg)
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">uint64_t</span> InputBuffer[<span style="color:#ae81ff">2</span>];
-</span></span><span style="display:flex;"><span>	<span style="color:#f92672">*</span>InputBuffer <span style="color:#f92672">=</span> ControlRegister;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>	DWORD bytes_returned;
-</span></span><span style="display:flex;"><span>	DeviceIoControl(drv_handle, <span style="color:#ae81ff">2238572</span>, <span style="color:#f92672">&amp;</span>InputBuffer, 
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">sizeof</span>(InputBuffer), <span style="color:#f92672">&amp;</span>InputBuffer, <span style="color:#66d9ef">sizeof</span>(InputBuffer),
-</span></span><span style="display:flex;"><span>     <span style="color:#f92672">&amp;</span>bytes_returned, <span style="color:#66d9ef">nullptr</span>);
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">return</span> InputBuffer[<span style="color:#ae81ff">1</span>];
-</span></span><span style="display:flex;"><span>}
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="kt">unsigned</span> <span class="kr">__int64</span> <span class="nf">read_cr</span><span class="p">(</span><span class="kt">uint64_t</span> <span class="n">control_reg</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="kt">uint64_t</span> <span class="n">InputBuffer</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">	<span class="o">*</span><span class="n">InputBuffer</span> <span class="o">=</span> <span class="n">ControlRegister</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">DWORD</span> <span class="n">bytes_returned</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="n">DeviceIoControl</span><span class="p">(</span><span class="n">drv_handle</span><span class="p">,</span> <span class="mi">2238572</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">InputBuffer</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">        <span class="k">sizeof</span><span class="p">(</span><span class="n">InputBuffer</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">InputBuffer</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">InputBuffer</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">     <span class="o">&amp;</span><span class="n">bytes_returned</span><span class="p">,</span> <span class="k">nullptr</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="n">InputBuffer</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></div><p>At this point, you can see how easy it is to exploit vulnerable drivers. For the following vulnerabilities that are exploited similarly to the ones described in the previous section, I&rsquo;ll just be showing the disassembly or psuedocode with a basic description, along with the communication structures and a function demonstrating communication.</p>
-<p>Being able to write to control registers is a very powerful vulnerability. For example, when we load <code>CR3</code> with a different physical address, we establish a whole new &amp; different <code>VA -&gt; PA</code> translation - we  are, in essence, in a new virtual address space. We can also see that we can change the <code>IRQL</code> (<code>writecr8</code>), though user-mode code is always executed at passive level, and so are most dispatch routines. We should not forget about <code>CR4</code>, with which we can toggle <code>SMEP/SMAP</code> (not reliable on newer versions of windows). With great power comes great responsibility, so this set of vulnerabilities should be used under extreme caution, for your own device&rsquo;s safety. The structure for this communication buffer is identical to the first one, but this time there is no data returned to us from the driver, and we have to populate each &amp; every subobject with a value. The first being the control register we want to write to, and the second, the value to be written. For the sake of brevity, we will continue to use an array as our communication buffer.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">write_cr</span>(<span style="color:#66d9ef">uint64_t</span> ControlRegister, DWORDLONG NewValue)
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">uint64_t</span> InputArg[<span style="color:#ae81ff">2</span>];
-</span></span><span style="display:flex;"><span>	<span style="color:#f92672">*</span>InputArg <span style="color:#f92672">=</span> ControlRegister;
-</span></span><span style="display:flex;"><span>	InputArg[<span style="color:#ae81ff">1</span>] <span style="color:#f92672">=</span> NewValue;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>	DWORD bytes_returned;
-</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">return</span> DeviceIoControl(drv_handle, <span style="color:#ae81ff">2238576</span>, <span style="color:#f92672">&amp;</span>InputArg, 
-</span></span><span style="display:flex;"><span>    	<span style="color:#66d9ef">sizeof</span>(InputArg), <span style="color:#f92672">&amp;</span>InputArg, <span style="color:#66d9ef">sizeof</span>(InputArg),
-</span></span><span style="display:flex;"><span>         <span style="color:#f92672">&amp;</span>bytes_returned, <span style="color:#66d9ef">nullptr</span>);
-</span></span><span style="display:flex;"><span>}
-</span></span></code></pre></div><p>You should get the hang of it now, so I&rsquo;ll leave the vulnerable driver at the end so you can reverse every vulnerability yourself since this process is becoming more repetitive than informative. But before I do that, we&rsquo;ll go over one last vulnerability.</p>
+<p>Being able to write to control registers is a very powerful vulnerability. For example, when we load <code>CR3</code> with a different physical address, we establish a whole new &amp; different virtual to physical translation - we are, in essence, in a new virtual address space. We can also see that we can change the <code>IRQL</code> (<code>writecr8</code>), though user-mode code is always executed at passive level, and so are most dispatch routines. We should not forget about <code>CR4</code>, with which we can toggle <code>SMEP/SMAP</code> (not reliable on newer versions of windows). With great power comes great responsibility, so this set of vulnerabilities should be used under extreme caution, for your own device&rsquo;s safety. The structure for this communication buffer is identical to the first one, but this time there is no data returned to us from the driver, and we have to populate each &amp; every subobject with a value. The first being the control register we want to write to, and the second, the value to be written. For the sake of brevity, we will continue to use an array as our communication buffer.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="kt">bool</span> <span class="nf">write_cr</span><span class="p">(</span><span class="kt">uint64_t</span> <span class="n">ControlRegister</span><span class="p">,</span> <span class="n">DWORDLONG</span> <span class="n">NewValue</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="kt">uint64_t</span> <span class="n">InputArg</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">	<span class="o">*</span><span class="n">InputArg</span> <span class="o">=</span> <span class="n">ControlRegister</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="n">InputArg</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">NewValue</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">DWORD</span> <span class="n">bytes_returned</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="n">DeviceIoControl</span><span class="p">(</span><span class="n">drv_handle</span><span class="p">,</span> <span class="mi">2238576</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">InputArg</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">    	<span class="k">sizeof</span><span class="p">(</span><span class="n">InputArg</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">InputArg</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">InputArg</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">         <span class="o">&amp;</span><span class="n">bytes_returned</span><span class="p">,</span> <span class="k">nullptr</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></div><p>You should get the hang of it now, so I&rsquo;ll leave the vulnerable driver at the end so you can reverse every vulnerability yourself since this process is becoming more repetitive than informative. But before I do that, we&rsquo;ll go over one last vulnerability mentioned in the introduction.</p>
 <h2 id="readwrite-physical-memory">Read/Write Physical Memory</h2>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>mapped_buffer_1 <span style="color:#f92672">=</span> MmMapIoSpace(SystemBuffer<span style="color:#f92672">-&gt;</span>PhysicalAddress, SystemBuffer<span style="color:#f92672">-&gt;</span>Flags, <span style="color:#ae81ff">0</span>i64);
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> ( mapped_buffer_1 )
-</span></span><span style="display:flex;"><span>  {
-</span></span><span style="display:flex;"><span>    return_buffer <span style="color:#f92672">=</span> (WCHAR <span style="color:#f92672">*</span>)SystemBuffer<span style="color:#f92672">-&gt;</span>Name;
-</span></span><span style="display:flex;"><span>    number_of_bytes <span style="color:#f92672">=</span> SystemBuffer<span style="color:#f92672">-&gt;</span>Flags;
-</span></span><span style="display:flex;"><span>    mapped_buffer <span style="color:#f92672">=</span> (<span style="color:#66d9ef">int</span> <span style="color:#f92672">*</span>)mapped_buffer_1;
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">while</span> ( number_of_bytes )
-</span></span><span style="display:flex;"><span>    {
-</span></span><span style="display:flex;"><span>      DataType <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(<span style="color:#f92672">&amp;</span>SystemBuffer<span style="color:#f92672">-&gt;</span>Flags <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>);
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">if</span> ( DataType )
-</span></span><span style="display:flex;"><span>      {
-</span></span><span style="display:flex;"><span>        v35 <span style="color:#f92672">=</span> DataType <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span>;
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> ( v35 )
-</span></span><span style="display:flex;"><span>        {
-</span></span><span style="display:flex;"><span>          <span style="color:#66d9ef">if</span> ( v35 <span style="color:#f92672">==</span> <span style="color:#ae81ff">1</span> )
-</span></span><span style="display:flex;"><span>          {
-</span></span><span style="display:flex;"><span>            value <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>mapped_buffer<span style="color:#f92672">++</span>;
-</span></span><span style="display:flex;"><span>            <span style="color:#f92672">*</span>(_DWORD <span style="color:#f92672">*</span>)return_buffer <span style="color:#f92672">=</span> value;
-</span></span><span style="display:flex;"><span>            return_buffer <span style="color:#f92672">+=</span> <span style="color:#ae81ff">2</span>;
-</span></span><span style="display:flex;"><span>            number_of_bytes <span style="color:#f92672">-=</span> <span style="color:#ae81ff">4</span>;
-</span></span><span style="display:flex;"><span>          }
-</span></span><span style="display:flex;"><span>        }
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">else</span>
-</span></span><span style="display:flex;"><span>        {
-</span></span><span style="display:flex;"><span>          word_value <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(_WORD <span style="color:#f92672">*</span>)mapped_buffer;
-</span></span><span style="display:flex;"><span>          mapped_buffer <span style="color:#f92672">=</span> (<span style="color:#66d9ef">int</span> <span style="color:#f92672">*</span>)((<span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span>)mapped_buffer <span style="color:#f92672">+</span> <span style="color:#ae81ff">2</span>);
-</span></span><span style="display:flex;"><span>          <span style="color:#f92672">*</span>return_buffer<span style="color:#f92672">++</span> <span style="color:#f92672">=</span> word_value;
-</span></span><span style="display:flex;"><span>          number_of_bytes <span style="color:#f92672">-=</span> <span style="color:#ae81ff">2</span>;
-</span></span><span style="display:flex;"><span>        }
-</span></span><span style="display:flex;"><span>      }
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">else</span>
-</span></span><span style="display:flex;"><span>      {
-</span></span><span style="display:flex;"><span>        byte_value <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">__int8</span> <span style="color:#f92672">*</span>)mapped_buffer;
-</span></span><span style="display:flex;"><span>        mapped_buffer <span style="color:#f92672">=</span> (<span style="color:#66d9ef">int</span> <span style="color:#f92672">*</span>)((<span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span>)mapped_buffer <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>);
-</span></span><span style="display:flex;"><span>        <span style="color:#f92672">*</span>(_BYTE <span style="color:#f92672">*</span>)return_buffer <span style="color:#f92672">=</span> byte_value;
-</span></span><span style="display:flex;"><span>        return_buffer <span style="color:#f92672">=</span> (WCHAR <span style="color:#f92672">*</span>)((<span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span>)return_buffer <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>);
-</span></span><span style="display:flex;"><span>        <span style="color:#f92672">--</span>number_of_bytes;
-</span></span><span style="display:flex;"><span>      }
-</span></span><span style="display:flex;"><span>    }
-</span></span><span style="display:flex;"><span>    MmUnmapIoSpace(mapped_buffer_1, SystemBuffer<span style="color:#f92672">-&gt;</span>Flags);
-</span></span><span style="display:flex;"><span>    v30 <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
-</span></span><span style="display:flex;"><span>  }
-</span></span></code></pre></div><p>Let&rsquo;s analyse the psuedocode above line by line and try to make sense of what&rsquo;s going on. I have casted the communication buffer <code>(SystemBuffer)</code> to a structure type of <code>RTL_QUERY_REGISTRY_TABLE</code> and renamed the fields, which will help us understand the alignment of the different fields within the communication buffer we will be constructing. I will be referring to the <code>RTL_QUERY_REGISTRY_TABLE</code> structure as &lsquo;RtlQ&rsquo; from now on. The layout of this structure is shown below.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">_RTL_QUERY_REGISTRY_TABLE</span>
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>    LONG (<span style="color:#f92672">*</span>QueryRoutine)(WCHAR<span style="color:#f92672">*</span> arg1, ULONG arg2, VOID<span style="color:#f92672">*</span> 
-</span></span><span style="display:flex;"><span>        arg3, ULONG arg4, VOID<span style="color:#f92672">*</span> arg5, VOID<span style="color:#f92672">*</span> arg6);  <span style="color:#75715e">//0x0
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    ULONG Flags;                                    <span style="color:#75715e">//0x8
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    WCHAR<span style="color:#f92672">*</span> Name;                                    <span style="color:#75715e">//0x10
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    VOID<span style="color:#f92672">*</span> EntryContext;                             <span style="color:#75715e">//0x18
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    ULONG DefaultType;                              <span style="color:#75715e">//0x20
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    VOID<span style="color:#f92672">*</span> DefaultData;                              <span style="color:#75715e">//0x28
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    ULONG DefaultLength;                            <span style="color:#75715e">//0x30
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>};
-</span></span></code></pre></div><p>On the first line we see a call to <code>MmMapIoSpace</code>, which maps a physical address range in the virtual <code>system PTE</code> range. It uses a physical address provided by our communication buffer, which should be the first suboject, and the amount of bytes from the physical range that should be mapped, which should be the next subobject. <code>SystemBuffer-&gt;PhysicalAddress</code> has the same offset from the beginning of <code>SystemBuffer</code> as <code>RtlQ-&gt;QueryRoutine</code> does from <code>RtlQ</code> (an offset of 0), and they are both the size of an <code>int64</code>. This means that the next subobject, which we&rsquo;ve already identified as the number of bytes to be mapped, should start at <code>(SystemBuffer + 0x8)</code>, making <code>SystemBuffer-&gt;NumberOfBytes</code> have the same offset as <code>RtlQ-&gt;Flags</code> from the beginning of the structure. After the call to <code>MmMapIoSpace</code> is made, it&rsquo;s return value is checked, and if the function fails the <code>StatusCode</code> of the <code>IOCTL </code>operation is set to <code>0xC0000001 (STATUS_UNSUCCESSFUL)</code>. In the case that the call did succeed, we begin iterating under the condition that the number of bytes is greater than zero. Now, another subobject within our communication buffer is introduced, which I&rsquo;ve named <code>DataType</code> for now. In the case that this value is 0, we <code>jmp</code> to the block of code down below.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>       	byte_value <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">__int8</span> <span style="color:#f92672">*</span>)mapped_buffer;
-</span></span><span style="display:flex;"><span>        mapped_buffer <span style="color:#f92672">=</span> (<span style="color:#66d9ef">int</span> <span style="color:#f92672">*</span>)((<span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span>)mapped_buffer <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>);
-</span></span><span style="display:flex;"><span>        <span style="color:#f92672">*</span>(_BYTE <span style="color:#f92672">*</span>)return_buffer <span style="color:#f92672">=</span> byte_value;
-</span></span><span style="display:flex;"><span>        return_buffer <span style="color:#f92672">=</span> (WCHAR <span style="color:#f92672">*</span>)((<span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span>)return_buffer <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>);
-</span></span><span style="display:flex;"><span>        <span style="color:#f92672">--</span>number_of_bytes;
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">    <span class="n">MappedVirtualMemory</span> <span class="o">=</span> <span class="n">MmMapIoSpace</span><span class="p">(</span><span class="o">*</span><span class="n">CommunicationBuffer</span><span class="p">,</span> <span class="o">*</span><span class="p">((</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="o">*</span><span class="p">)</span><span class="n">CommunicationBuffer</span> <span class="o">+</span> <span class="mi">2</span><span class="p">),</span> <span class="mi">0</span><span class="n">i64</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span> <span class="n">MappedVirtualMemory</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">v20</span> <span class="o">=</span> <span class="p">(</span><span class="kt">int</span> <span class="o">*</span><span class="p">)</span><span class="n">CommunicationBuffer</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">      <span class="n">NumberOfBytes</span> <span class="o">=</span> <span class="o">*</span><span class="p">((</span><span class="n">_DWORD</span> <span class="o">*</span><span class="p">)</span><span class="n">CommunicationBuffer</span> <span class="o">+</span> <span class="mi">2</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="k">while</span> <span class="p">(</span> <span class="n">NumberOfBytes</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">      <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">Type</span> <span class="o">=</span> <span class="o">*</span><span class="p">((</span><span class="n">_DWORD</span> <span class="o">*</span><span class="p">)</span><span class="n">CommunicationBuffer</span> <span class="o">+</span> <span class="mi">3</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="p">(</span> <span class="n">Type</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="p">{</span>
+</span></span><span class="line"><span class="cl">          <span class="k">if</span> <span class="p">(</span> <span class="o">--</span><span class="n">Type</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">          <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="k">if</span> <span class="p">(</span> <span class="n">Type</span> <span class="o">==</span> <span class="mi">1</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">            <span class="p">{</span>
+</span></span><span class="line"><span class="cl">              <span class="n">v25</span> <span class="o">=</span> <span class="o">*</span><span class="n">v20</span><span class="o">++</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">              <span class="o">*</span><span class="p">(</span><span class="n">_DWORD</span> <span class="o">*</span><span class="p">)</span><span class="n">MappedVirtualMemory</span> <span class="o">=</span> <span class="n">v25</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">              <span class="n">MappedVirtualMemory</span> <span class="o">+=</span> <span class="mi">4</span><span class="n">i64</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">              <span class="n">NumberOfBytes</span> <span class="o">-=</span> <span class="mi">4</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="p">}</span>
+</span></span><span class="line"><span class="cl">          <span class="p">}</span>
+</span></span><span class="line"><span class="cl">          <span class="k">else</span>
+</span></span><span class="line"><span class="cl">          <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="n">v26</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="n">_WORD</span> <span class="o">*</span><span class="p">)</span><span class="n">v20</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="n">v20</span> <span class="o">=</span> <span class="p">(</span><span class="kt">int</span> <span class="o">*</span><span class="p">)((</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">v20</span> <span class="o">+</span> <span class="mi">2</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">            <span class="o">*</span><span class="p">(</span><span class="n">_WORD</span> <span class="o">*</span><span class="p">)</span><span class="n">MappedVirtualMemory</span> <span class="o">=</span> <span class="n">v26</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="n">MappedVirtualMemory</span> <span class="o">+=</span> <span class="mi">2</span><span class="n">i64</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="n">NumberOfBytes</span> <span class="o">-=</span> <span class="mi">2</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">          <span class="p">}</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">        <span class="k">else</span>
+</span></span><span class="line"><span class="cl">        <span class="p">{</span>
+</span></span><span class="line"><span class="cl">          <span class="n">v27</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kr">__int8</span> <span class="o">*</span><span class="p">)</span><span class="n">v20</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">          <span class="n">v20</span> <span class="o">=</span> <span class="p">(</span><span class="kt">int</span> <span class="o">*</span><span class="p">)((</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">v20</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">          <span class="o">*</span><span class="p">(</span><span class="n">_BYTE</span> <span class="o">*</span><span class="p">)</span><span class="n">MappedVirtualMemory</span><span class="o">++</span> <span class="o">=</span> <span class="n">v27</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">          <span class="o">--</span><span class="n">NumberOfBytes</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">      <span class="p">}</span>
+</span></span><span class="line"><span class="cl">      <span class="n">MmUnmapIoSpace</span><span class="p">(</span><span class="n">MappedVirtualMemory</span><span class="p">,</span> <span class="o">*</span><span class="p">((</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="o">*</span><span class="p">)</span><span class="n">CommunicationBuffer</span> <span class="o">+</span> <span class="mi">2</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">      <span class="n">StatusCode</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="c1">// success
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="k">else</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">StatusCode</span> <span class="o">=</span> <span class="mh">0xC0000001</span><span class="p">;</span> <span class="c1">// unsuccessful
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="p">}</span>
+</span></span></code></pre></div><p>Let&rsquo;s analyse the psuedocode above line by line and try to make sense of what&rsquo;s going on. On the first line we see a call to <code>MmMapIoSpace</code>, which maps a physical address range in the virtual <code>system PTE</code> range. It uses a physical address provided by our communication buffer, which should be the first suboject, and the amount of bytes from the physical range that should be mapped, which should be the next subobject. The field <code>SystemBuffer-&gt;PhysicalAddress</code> has an offset of 0 from the beginning of the structure, this means that the next subobject, which we&rsquo;ve already identified as the number of bytes to be mapped, should start at <code>(SystemBuffer + 0x8)</code>. This is referred to as <code>NumberOfBytes</code> in the psuedocode. After the call to <code>MmMapIoSpace</code> is made, it&rsquo;s return value is checked, and if the function fails the <code>StatusCode</code> of the <code>IOCTL </code>operation is set to <code>0xC0000001 (STATUS_UNSUCCESSFUL)</code>. In the case that the call did succeed, we begin iterating under the condition that the number of bytes is greater than zero. Now, another subobject within our communication buffer is introduced, which I&rsquo;ve named <code>DataType</code> for now. In the case that this value is 0, we <code>jmp</code> to the block of code down below.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">       	<span class="n">byte_value</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kr">__int8</span> <span class="o">*</span><span class="p">)</span><span class="n">mapped_buffer</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">mapped_buffer</span> <span class="o">=</span> <span class="p">(</span><span class="kt">int</span> <span class="o">*</span><span class="p">)((</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">mapped_buffer</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="o">*</span><span class="p">(</span><span class="n">_BYTE</span> <span class="o">*</span><span class="p">)</span><span class="n">return_buffer</span> <span class="o">=</span> <span class="n">byte_value</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">return_buffer</span> <span class="o">=</span> <span class="p">(</span><span class="n">WCHAR</span> <span class="o">*</span><span class="p">)((</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">return_buffer</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="o">--</span><span class="n">number_of_bytes</span><span class="p">;</span>
 </span></span></code></pre></div><p>From this psuedocode, it is clear that this is a read operation. First, the value at the start of the mapped buffer is stored into a variable named <code>byte_value</code>, and then <code>mapped_buffer</code> is incremented to point to the byte that is after the previous byte that was read. Then, <code>byte_value</code> is copied into <code>return_buffer</code>, who&rsquo;s initial value was:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span>    return_buffer <span style="color:#f92672">=</span> (<span style="color:#66d9ef">wchar_t</span> <span style="color:#f92672">*</span>)SystemBuffer<span style="color:#f92672">-&gt;</span>ReturnBuffer;
-</span></span></code></pre></div><p>After the copy, we increment the return_buffer to point to the byte after where the new data was copied. Then, the <code>NumberOfBytes</code> is decremented to indicate that we have copied one byte. When all the bytes are copied, <code>NumberOfBytes</code> will equal zero, and the loop will break. So, essentially, we map a physical range to a <code>system PTE</code> virtual range and then copy the contents of that range, byte by byte, into a user-mode buffer. Now we see that the other two options specified by the value of <code>DataType</code> only differ in the way they copy each section of memory. If <code>DataType</code> is 2, then data will be copied as <code>DWORD</code> (4 bytes) chunks, and if <code>DataType</code> is 1, it&rsquo;ll be copied as <code>WORDS</code> (2 bytes). Knowing this, we can reconstruct the psuedocode to make it easily understandable</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#75715e">#define SIZEOF_DWORD 4
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e">#define SIZEOF_WORD 2
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e">#define SIZEOF_BYTE 1
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">int</span><span style="color:#f92672">*</span> mapped_buffer <span style="color:#f92672">=</span> (<span style="color:#66d9ef">int</span><span style="color:#f92672">*</span>)MmMapIoSpace(SystemBuffer<span style="color:#f92672">-&gt;</span>PhysicalAddress, 
-</span></span><span style="display:flex;"><span>		SystemBuffer<span style="color:#f92672">-&gt;</span>NumberOfBytes, <span style="color:#ae81ff">0</span>i64); 
-</span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> ( <span style="color:#f92672">!</span>mapped_buffer ) 
-</span></span><span style="display:flex;"><span>{ 
-</span></span><span style="display:flex;"><span>    StatusCode <span style="color:#f92672">=</span> STATUS_UNSUCCESSFUL; 
-</span></span><span style="display:flex;"><span>    Irp<span style="color:#f92672">-&gt;</span>IoStatus<span style="color:#f92672">-&gt;</span>Status <span style="color:#f92672">=</span> StatusCode;
-</span></span><span style="display:flex;"><span>    Irp<span style="color:#f92672">-&gt;</span>IoStatus<span style="color:#f92672">-&gt;</span>Information <span style="color:#f92672">=</span> <span style="color:#ae81ff">24</span>;
-</span></span><span style="display:flex;"><span>    IofCompleteRequest(Irp, <span style="color:#ae81ff">0</span>);
-</span></span><span style="display:flex;"><span>}
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">else</span> 
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>    return_buffer <span style="color:#f92672">=</span> (WCHAR <span style="color:#f92672">*</span>)SystemBuffer<span style="color:#f92672">-&gt;</span>ReturnBuffer;
-</span></span><span style="display:flex;"><span>    number_of_bytes <span style="color:#f92672">=</span> SystemBuffer<span style="color:#f92672">-&gt;</span>NumberOfBytes;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">while</span> (NumberOfBytes) 
-</span></span><span style="display:flex;"><span>    {
-</span></span><span style="display:flex;"><span>        DataType <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(<span style="color:#f92672">&amp;</span>SystemBuffer<span style="color:#f92672">-&gt;</span>NumberOfBytes <span style="color:#f92672">+</span> SIZEOF_BYTE);
-</span></span><span style="display:flex;"><span>      
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> ( DataType <span style="color:#f92672">==</span> <span style="color:#ae81ff">2</span> )
-</span></span><span style="display:flex;"><span>        {
-</span></span><span style="display:flex;"><span>      	    <span style="color:#75715e">// Copy DWORD by DWORD
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>            dword_value <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>mapped_buffer<span style="color:#f92672">++</span>;
-</span></span><span style="display:flex;"><span>            <span style="color:#f92672">*</span>(_DWORD <span style="color:#f92672">*</span>)return_buffer <span style="color:#f92672">=</span> dword_value;
-</span></span><span style="display:flex;"><span>            return_buffer <span style="color:#f92672">+=</span> SIZEOF_WORD;
-</span></span><span style="display:flex;"><span>            number_of_bytes <span style="color:#f92672">-=</span> SIZEOF_DWORD;
-</span></span><span style="display:flex;"><span>        }
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">else</span> <span style="color:#a6e22e">if</span> ( DataType <span style="color:#f92672">==</span> <span style="color:#ae81ff">1</span> )
-</span></span><span style="display:flex;"><span>        {
-</span></span><span style="display:flex;"><span>      	    <span style="color:#75715e">// Copy WORD by WORD
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>            word_value <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(_WORD <span style="color:#f92672">*</span>)mapped_buffer;
-</span></span><span style="display:flex;"><span>            mapped_buffer <span style="color:#f92672">=</span> (<span style="color:#66d9ef">int</span> <span style="color:#f92672">*</span>)((<span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span>)mapped_buffer <span style="color:#f92672">+</span> SIZE_WORD);
-</span></span><span style="display:flex;"><span>            <span style="color:#f92672">*</span>return_buffer<span style="color:#f92672">++</span> <span style="color:#f92672">=</span> word_value;
-</span></span><span style="display:flex;"><span>            number_of_bytes <span style="color:#f92672">-=</span> SIZEOF_WORD;
-</span></span><span style="display:flex;"><span>        } 
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">else</span> <span style="color:#a6e22e">if</span> ( DataType <span style="color:#f92672">==</span> <span style="color:#ae81ff">0</span> )
-</span></span><span style="display:flex;"><span>        {
-</span></span><span style="display:flex;"><span>      	    <span style="color:#75715e">// Copy BYTE by BYTE
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>      	    byte_value <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">__int8</span> <span style="color:#f92672">*</span>)mapped_buffer;
-</span></span><span style="display:flex;"><span>            mapped_buffer <span style="color:#f92672">=</span> (<span style="color:#66d9ef">int</span> <span style="color:#f92672">*</span>)((<span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span>)mapped_buffer <span style="color:#f92672">+</span> SIZEOF_BYTE);
-</span></span><span style="display:flex;"><span>            <span style="color:#f92672">*</span>(_BYTE <span style="color:#f92672">*</span>)return_buffer <span style="color:#f92672">=</span> byte_value;
-</span></span><span style="display:flex;"><span>            return_buffer <span style="color:#f92672">=</span> (WCHAR <span style="color:#f92672">*</span>)((<span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span>)return_buffer <span style="color:#f92672">+</span> SIZEOF_BYTE);
-</span></span><span style="display:flex;"><span>            <span style="color:#f92672">--</span>number_of_bytes;
-</span></span><span style="display:flex;"><span>        }
-</span></span><span style="display:flex;"><span>     }
-</span></span><span style="display:flex;"><span>}
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">    <span class="n">return_buffer</span> <span class="o">=</span> <span class="p">(</span><span class="kt">wchar_t</span> <span class="o">*</span><span class="p">)</span><span class="n">SystemBuffer</span><span class="o">-&gt;</span><span class="n">ReturnBuffer</span><span class="p">;</span>
+</span></span></code></pre></div><p>After the copy, we increment the <code>return_buffer</code> to point to the byte after where the new data was copied. Then, the <code>NumberOfBytes</code> is decremented to indicate that we have copied one byte. When all the bytes are copied, <code>NumberOfBytes</code> will equal zero, and the loop will break. So, essentially, we map a physical range to a <code>system PTE</code> virtual range and then copy the contents of that range, byte by byte, into a user-mode buffer. Now we see that the other two options specified by the value of <code>DataType</code> only differ in the way they copy each section of memory. If <code>DataType</code> is 2, then data will be copied as <code>DWORD</code> (4 bytes) chunks, and if <code>DataType</code> is 1, it&rsquo;ll be copied as <code>WORDS</code> (2 bytes). Knowing this, we can reconstruct the psuedocode to make it easily understandable</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="cp">#define SIZEOF_DWORD 4
+</span></span></span><span class="line"><span class="cl"><span class="cp">#define SIZEOF_WORD 2
+</span></span></span><span class="line"><span class="cl"><span class="cp">#define SIZEOF_BYTE 1
+</span></span></span><span class="line"><span class="cl"><span class="cp"></span>
+</span></span><span class="line"><span class="cl"><span class="kt">int</span><span class="o">*</span> <span class="n">mapped_buffer</span> <span class="o">=</span> <span class="p">(</span><span class="kt">int</span><span class="o">*</span><span class="p">)</span><span class="n">MmMapIoSpace</span><span class="p">(</span><span class="n">SystemBuffer</span><span class="o">-&gt;</span><span class="n">PhysicalAddress</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">		<span class="n">SystemBuffer</span><span class="o">-&gt;</span><span class="n">NumberOfBytes</span><span class="p">,</span> <span class="mi">0</span><span class="n">i64</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">        
+</span></span><span class="line"><span class="cl"><span class="k">if</span> <span class="p">(</span> <span class="o">!</span><span class="n">mapped_buffer</span> <span class="p">)</span> 
+</span></span><span class="line"><span class="cl"><span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">StatusCode</span> <span class="o">=</span> <span class="n">STATUS_UNSUCCESSFUL</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">Irp</span><span class="o">-&gt;</span><span class="n">IoStatus</span><span class="o">-&gt;</span><span class="n">Status</span> <span class="o">=</span> <span class="n">StatusCode</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">Irp</span><span class="o">-&gt;</span><span class="n">IoStatus</span><span class="o">-&gt;</span><span class="n">Information</span> <span class="o">=</span> <span class="mi">24</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">IofCompleteRequest</span><span class="p">(</span><span class="n">Irp</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="k">else</span> 
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">return_buffer</span> <span class="o">=</span> <span class="p">(</span><span class="n">WCHAR</span> <span class="o">*</span><span class="p">)</span><span class="n">SystemBuffer</span><span class="o">-&gt;</span><span class="n">ReturnBuffer</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">number_of_bytes</span> <span class="o">=</span> <span class="n">SystemBuffer</span><span class="o">-&gt;</span><span class="n">NumberOfBytes</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">while</span> <span class="p">(</span><span class="n">NumberOfBytes</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">DataType</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="o">&amp;</span><span class="n">SystemBuffer</span><span class="o">-&gt;</span><span class="n">NumberOfBytes</span> <span class="o">+</span> <span class="n">SIZEOF_BYTE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="p">(</span> <span class="n">DataType</span> <span class="o">==</span> <span class="mi">2</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      	    <span class="c1">// Copy DWORD by DWORD
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>            <span class="n">dword_value</span> <span class="o">=</span> <span class="o">*</span><span class="n">mapped_buffer</span><span class="o">++</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="o">*</span><span class="p">(</span><span class="n">_DWORD</span> <span class="o">*</span><span class="p">)</span><span class="n">return_buffer</span> <span class="o">=</span> <span class="n">dword_value</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="n">return_buffer</span> <span class="o">+=</span> <span class="n">SIZEOF_WORD</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="n">number_of_bytes</span> <span class="o">-=</span> <span class="n">SIZEOF_DWORD</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">        <span class="k">else</span> <span class="nf">if</span> <span class="p">(</span> <span class="n">DataType</span> <span class="o">==</span> <span class="mi">1</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      	    <span class="c1">// Copy WORD by WORD
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>            <span class="n">word_value</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="n">_WORD</span> <span class="o">*</span><span class="p">)</span><span class="n">mapped_buffer</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="n">mapped_buffer</span> <span class="o">=</span> <span class="p">(</span><span class="kt">int</span> <span class="o">*</span><span class="p">)((</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">mapped_buffer</span> <span class="o">+</span> <span class="n">SIZE_WORD</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">            <span class="o">*</span><span class="n">return_buffer</span><span class="o">++</span> <span class="o">=</span> <span class="n">word_value</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="n">number_of_bytes</span> <span class="o">-=</span> <span class="n">SIZEOF_WORD</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">        <span class="k">else</span> <span class="nf">if</span> <span class="p">(</span> <span class="n">DataType</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      	    <span class="c1">// Copy BYTE by BYTE
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>      	    <span class="n">byte_value</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kr">__int8</span> <span class="o">*</span><span class="p">)</span><span class="n">mapped_buffer</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="n">mapped_buffer</span> <span class="o">=</span> <span class="p">(</span><span class="kt">int</span> <span class="o">*</span><span class="p">)((</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">mapped_buffer</span> <span class="o">+</span> <span class="n">SIZEOF_BYTE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">            <span class="o">*</span><span class="p">(</span><span class="n">_BYTE</span> <span class="o">*</span><span class="p">)</span><span class="n">return_buffer</span> <span class="o">=</span> <span class="n">byte_value</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="n">return_buffer</span> <span class="o">=</span> <span class="p">(</span><span class="n">WCHAR</span> <span class="o">*</span><span class="p">)((</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">return_buffer</span> <span class="o">+</span> <span class="n">SIZEOF_BYTE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">            <span class="o">--</span><span class="n">number_of_bytes</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">     <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></div><p>So our communication buffer should look something like this.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-cpp" data-lang="cpp"><span style="display:flex;"><span><span style="color:#75715e">#pragma pack(push, 1)
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">typedef</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">_READ_PHYSICAL</span>
-</span></span><span style="display:flex;"><span>{
-</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">uint64_t</span> PhysicalAddress; <span style="color:#75715e">// 0x0 (Input)
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>	<span style="color:#66d9ef">uint32_t</span> NumberOfBytes;   <span style="color:#75715e">// 0x8 (Input)
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>	<span style="color:#66d9ef">uint32_t</span> DataType;        <span style="color:#75715e">// 0xC (Input)
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>	<span style="color:#66d9ef">void</span><span style="color:#f92672">*</span>    ReturnBuffer;    <span style="color:#75715e">// 0x10 (Output)
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>} READ_PHYSICAL, <span style="color:#f92672">*</span>PREAD_PHYSICAL;
-</span></span><span style="display:flex;"><span><span style="color:#75715e">#pragma pack(pop)
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="cp">#pragma pack(push, 1)
+</span></span></span><span class="line"><span class="cl"><span class="cp"></span><span class="k">typedef</span> <span class="k">struct</span> <span class="nc">_READ_PHYSICAL</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="kt">uint64_t</span> <span class="n">PhysicalAddress</span><span class="p">;</span> <span class="c1">// 0x0 (Input)
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="kt">uint32_t</span> <span class="n">NumberOfBytes</span><span class="p">;</span>   <span class="c1">// 0x8 (Input)
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="kt">uint32_t</span> <span class="n">DataType</span><span class="p">;</span>        <span class="c1">// 0xC (Input)
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="kt">void</span><span class="o">*</span>    <span class="n">ReturnBuffer</span><span class="p">;</span>    <span class="c1">// 0x10 (Output)
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="p">}</span> <span class="n">READ_PHYSICAL</span><span class="p">,</span> <span class="o">*</span><span class="n">PREAD_PHYSICAL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="cp">#pragma pack(pop)
 </span></span></span></code></pre></div><p>The control code for this operation is <code>0x222808</code>, so you now have all the information needed to read physical memory with this driver. The &ldquo;write physical&rdquo; operation  is almost identical to the read operation, and so in depth explanation again is not needed. The only difference is that the purpose of the last field in the communication buffer should not be a user-mode allocated buffer that the mapped virtual memory will be copied to, but a value that the mapped virtual memory will be written to, the control code that maps to this operation is <code>0x22280C</code>.</p>
 <h2 id="conclusion">Conclusion</h2>
-<p>Now you should be able to reverse drivers for their device name, communication structures, control codes and understand the logic of the different operations. You should also understand how <code>IOCTL</code> works internally, at a high level. We&rsquo;ve looked at <code>R/W</code> control registers, allocate and release kernel memory and <code>R/W</code> physical memory. There are still a lot of different vulnerabilities that this driver exposes, so you can download it and continue reversing it for yourself here <a href="https://github.com/xgtbz/AsrOmgDrv">https://github.com/xgtbz/AsrOmgDrv</a>.</p>
+<p>Now you should be able to reverse drivers for their device name, communication structures, control codes and understand the logic of the different operations. You should also understand how <code>IOCTL</code> works internally, at a high level. We&rsquo;ve looked at <code>R/W</code> control registers, allocate and release kernel memory and <code>R/W</code> physical memory. There are still a lot of different vulnerabilities that this driver exposes, so you can download it and continue reversing it for yourself <a href="https://github.com/xgtbz/AsrOmgDrv">here</a>.</p>
 
             </div>
         </article></main>
@@ -666,7 +640,7 @@ call    cs:IoCreateSymbolicLink
     &nbsp;
 
     <div class="footer_social-icons">
-<a href="https://github.com/xgtbz" target="_blank" rel="noopener noreferrer me"
+<a href="https://github.com/xgtbz/" target="_blank" rel="noopener noreferrer me"
     title="Github">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
     stroke-linecap="round" stroke-linejoin="round">
@@ -675,9 +649,18 @@ call    cs:IoCreateSymbolicLink
     </path>
 </svg>
 </a>
+<a href="" target="_blank" rel="noopener noreferrer me"
+    title="Discord">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="20 15 205 190" fill="currentColor" stroke="none">
+    <path
+        d="M104.4 103.9c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1.1-6.1-4.5-11.1-10.2-11.1zM140.9 103.9c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1s-4.5-11.1-10.2-11.1z" />
+    <path
+        d="M189.5 20h-134C44.2 20 35 29.2 35 40.6v135.2c0 11.4 9.2 20.6 20.5 20.6h113.4l-5.3-18.5 12.8 11.9 12.1 11.2 21.5 19V40.6c0-11.4-9.2-20.6-20.5-20.6zm-38.6 130.6s-3.6-4.3-6.6-8.1c13.1-3.7 18.1-11.9 18.1-11.9-4.1 2.7-8 4.6-11.5 5.9-5 2.1-9.8 3.5-14.5 4.3-9.6 1.8-18.4 1.3-25.9-.1-5.7-1.1-10.6-2.7-14.7-4.3-2.3-.9-4.8-2-7.3-3.4-.3-.2-.6-.3-.9-.5-.2-.1-.3-.2-.4-.3-1.8-1-2.8-1.7-2.8-1.7s4.8 8 17.5 11.8c-3 3.8-6.7 8.3-6.7 8.3-22.1-.7-30.5-15.2-30.5-15.2 0-32.2 14.4-58.3 14.4-58.3 14.4-10.8 28.1-10.5 28.1-10.5l1 1.2c-18 5.2-26.3 13.1-26.3 13.1s2.2-1.2 5.9-2.9c10.7-4.7 19.2-6 22.7-6.3.6-.1 1.1-.2 1.7-.2 6.1-.8 13-1 20.2-.2 9.5 1.1 19.7 3.9 30.1 9.6 0 0-7.9-7.5-24.9-12.7l1.4-1.6s13.7-.3 28.1 10.5c0 0 14.4 26.1 14.4 58.3 0 0-8.5 14.5-30.6 15.2z" />
+</svg>
+</a>
 </div>
     <small class="footer_copyright">
-        © 2024 xgtbz.
+        © 2026 sh.
         
     </small>
 </footer>
